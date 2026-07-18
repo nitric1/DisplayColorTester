@@ -1,0 +1,11 @@
+*.sln               eol=crlf
+*.vcxproj           eol=crlf
+*.vcxproj.filters   eol=crlf
+*.props             eol=crlf
+*.rc                eol=crlf
+*.bat               eol=crlf
+
+*.c     eol=lf
+*.cpp   eol=lf
+*.h     eol=lf
+*.hpp   eol=lf

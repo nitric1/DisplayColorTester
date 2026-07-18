@@ -1,0 +1,19 @@
+# Files
+*.vcxproj.user
+*.aps
+*.APS
+*.opensdf
+*.sdf
+*.suo
+*.VC.db
+*.VC.opendb
+LocMetrics*
+
+# Directories
+.vs
+Data
+Debug
+Release
+x64
+ipch
+vcpkg_installed
