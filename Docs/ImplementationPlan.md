@@ -64,6 +64,18 @@
 - 출력 장치가 선택한 색역을 완전히 재현할 수 없는 경우의 clipping 또는 gamut mapping 정책을 문서화한다.
 - SDR/HDR 혼합 모니터 구성에서 각 모니터가 올바른 출력 경로를 선택하는지 검증한다.
 
+### 3.5 5차 구현: Display Native RGB 한계 출력
+
+표준 색역 지원을 완료한 뒤 `Display Native RGB (Best effort)` 모드를 추가한다. 이 모드는 색 정확도 확인이 아니라 각 디스플레이가 보고한 native RGB gamut의 꼭짓점과 장치 RGB 최대 코드값을 확인하기 위한 진단 기능이다.
+
+- 메인 창 마지막에 `Display Native RGB (Best effort)` 버튼을 추가한다.
+- Red, Green, Blue에서는 대상 RGB 채널 하나를 최대로, 나머지 채널을 0으로 출력한다.
+- Yellow, Magenta, Cyan, White에서는 해당 채널 조합을 최대로 출력하고 Black에서는 모든 채널을 0으로 출력한다.
+- 논리 색상 순서와 입력 동작은 기존 테스트 모드와 동일하게 유지하되, 실제 출력값은 모니터별 native color 특성에 따라 다르게 계산할 수 있게 한다.
+- Windows Advanced Color 활성 여부, 디스플레이의 보고된 원색 좌표와 프로필 신뢰도를 화면 또는 진단 정보에서 확인할 수 있게 한다.
+- 디스플레이 정보가 누락되거나 모순되면 이 모드를 비활성화하거나 결과가 추정값임을 명확히 표시한다.
+- 이 모드는 물리 subpixel의 직접 구동이나 측정 장비 수준의 최대 휘도를 보장하지 않는다고 UI와 문서에 명시한다.
+
 ## 4. 1차 구현 상세 계획
 
 ### 4.1 프로젝트 기반 정리
@@ -265,3 +277,56 @@
 - 고정밀 swap chain과 색상 관리 중복 적용 방지
 
 따라서 1차 구현의 GDI 렌더러는 최종 색상 관리 구현이 아니라 UI와 다중 모니터 동작을 검증하기 위한 명시적인 MVP로 유지한다.
+
+## 9. Display Native RGB 구현 가능 범위와 한계
+
+### 9.1 기능 정의
+
+이 기능에서 `Native RGB`는 물리 subpixel에 직접 접근한다는 뜻이 아니라, 각 디스플레이의 장치 RGB 공간에서 다음 꼭짓점 값을 출력한다는 뜻으로 정의한다.
+
+| 색상 | 장치 RGB 목표값 |
+| --- | --- |
+| Red | `(1, 0, 0)` |
+| Green | `(0, 1, 0)` |
+| Blue | `(0, 0, 1)` |
+| Yellow | `(1, 1, 0)` |
+| Magenta | `(1, 0, 1)` |
+| Cyan | `(0, 1, 1)` |
+| White | `(1, 1, 1)` |
+| Black | `(0, 0, 0)` |
+
+여기서 `1`은 해당 출력 경로에서 허용하는 최대 채널 코드값이다. 이는 패널의 실제 발광 소자 전류나 휘도 측정값과 동일한 개념이 아니다.
+
+### 9.2 출력 경로
+
+- Advanced Color가 활성화된 환경에서는 flip-model DXGI swap chain과 FP16 scRGB 출력을 사용한다.
+- `IDXGIOutput6::GetDesc1`의 원색 좌표, 백색점, 색 공간 및 휘도 정보를 모니터별로 수집한다.
+- 보고된 native primary를 scRGB 좌표로 변환하여 출력하고, Windows의 디스플레이 변환과 clipping을 거쳐 대상 디스플레이의 gamut 경계에 도달하도록 한다.
+- Advanced Color가 비활성화된 legacy SDR 환경에서는 Windows가 앱 출력에 시스템 색 관리를 적용하지 않는 특성을 이용해 full-range device RGB 코드값을 출력한다.
+- 서로 다른 모니터에는 같은 논리 색상을 표시하되, native gamut이 다르므로 실제 색도와 변환값은 모니터별로 달라질 수 있다.
+
+### 9.3 보장할 수 없는 사항
+
+일반 Win32/DXGI 애플리케이션에는 패널의 물리 subpixel을 개별적으로 직접 구동하는 범용 API가 없다. 다음 요소는 애플리케이션 출력 이후에도 결과를 변경할 수 있다.
+
+- GPU/Windows 보정 LUT와 색상 변환
+- 모니터 내부의 gamut mode, white balance, gamma 및 동적 명암 처리
+- HDR tone mapping, 자동 밝기 제한과 local dimming
+- RGBW, PenTile, quantum-dot conversion 등 RGB stripe가 아닌 패널 구조
+- EDID 또는 ICC/MHC 프로필의 누락이나 부정확한 원색 좌표
+
+따라서 이 기능은 `Display Native RGB (Best effort)`로 명명한다. “각 채널에 가능한 최대 디지털 입력을 제공하고 native gamut 경계를 목표로 한다”는 것은 구현할 수 있지만, “각 물리 subpixel이 실제 최대 밝기로 발광한다”는 것은 소프트웨어만으로 검증하거나 보장할 수 없다. 정확한 확인에는 색도계 또는 분광측색계 측정이 필요하다.
+
+### 9.4 구현 전 검증 과제
+
+1. Advanced Color가 켜진 SDR 디스플레이를 Win32에서 신뢰성 있게 식별할 방법을 확정한다.
+2. `DXGI_OUTPUT_DESC1` 원색 정보와 ICC/MHC 프로필 정보가 서로 다른 경우의 우선순위를 정한다.
+3. native primary의 xy 좌표와 기준 휘도를 scRGB 값으로 변환하는 행렬을 검증한다.
+4. HDR과 SDR에서 `1.0`의 휘도 해석이 다른 점을 반영해 최대 채널과 최대 휘도 정책을 분리한다.
+5. OS 색상 관리 활성/비활성 상태별 결과를 계측 장비로 비교한다.
+
+참고 자료:
+
+- [Use DirectX with Advanced Color on high/standard dynamic range displays](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range)
+- [ICC profile behavior with Advanced Color](https://learn.microsoft.com/en-us/windows/win32/wcs/advanced-color-icc-profiles)
+- [DXGI_OUTPUT_DESC1 structure](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_6/ns-dxgi1_6-dxgi_output_desc1)
