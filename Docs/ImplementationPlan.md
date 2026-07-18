@@ -69,11 +69,28 @@
 
 ### 3.4 4차 구현: Adobe RGB 및 BT.2020 지원
 
+상태: 완료
+
 - Adobe RGB와 BT.2020 색역 정의를 추가한다.
 - 두 버튼을 활성화한다.
 - 모니터별 ICC/WCS 변환 및 Advanced Color 경로를 완성한다.
 - 출력 장치가 선택한 색역을 완전히 재현할 수 없는 경우의 clipping 또는 gamut mapping 정책을 문서화한다.
 - SDR/HDR 혼합 모니터 구성에서 각 모니터가 올바른 출력 경로를 선택하는지 검증한다.
+
+구현된 출력 정책은 다음과 같다.
+
+- Adobe RGB는 `(0.6400, 0.3300)`, `(0.2100, 0.7100)`, `(0.1500, 0.0600)` 원색, D65 백색점과 `2.19921875` power 전달 함수를 사용한다.
+- BT.2020은 `(0.7080, 0.2920)`, `(0.1700, 0.7970)`, `(0.1310, 0.0460)` 원색, D65 백색점과 BT.2020 전달 함수를 사용한다.
+- 원색과 백색점에서 색역별 linear RGB→XYZ 행렬을 계산하고, 이를 linear XYZ→scRGB 행렬과 합성한다.
+- Advanced Color 화면에는 합성 행렬 결과를 FP16 scRGB로 출력한다. 대상 모니터 gamut 밖의 값은 Windows display pipeline의 numeric clipping에 맡긴다.
+- legacy SDR 화면에는 선택 색역에서 모니터 ICC 프로필로 WCS relative-colorimetric 변환한 device RGB 값을 출력한다.
+- WCS `LOGCOLORSPACE`가 단일 power gamma만 표현하므로 BT.2020에는 `2.4` 근사를 사용한다. 현재 테스트 색상은 각 채널이 `0` 또는 `1`인 gamut 꼭짓점만 사용하므로 전달 함수 종류와 관계없이 선형 endpoint가 동일하다.
+- 프로필을 사용할 수 없는 legacy SDR 화면에서는 해당 화면에서 재현 가능한 RGB gamut 경계로 clipping하는 fallback을 사용한다.
+
+색역 정의 참고 자료:
+
+- [Adobe RGB (1998) Color Image Encoding](https://www.adobe.com/digitalimag/pdfs/AdobeRGB1998.pdf)
+- [Recommendation ITU-R BT.2020](https://www.itu.int/rec/R-REC-BT.2020)
 
 ### 3.5 5차 구현: Display Native RGB 한계 출력
 
@@ -224,7 +241,7 @@
 | `TestColors.h` | 색역·논리 색상 ID, 표시 순서와 색상 이름/코드 테이블 |
 | `TestRenderer.h/.cpp` | 색역별 렌더러 인터페이스와 생성 |
 | `GdiSrgbRenderer.h/.cpp` | 기존 GDI sRGB 출력 |
-| `DisplayP3Renderer.h/.cpp` | 모니터별 Advanced Color 또는 ICC/WCS 기반 Display-P3 출력 |
+| `ColorManagedRenderer.h/.cpp` | Display-P3, Adobe RGB 및 BT.2020의 모니터별 Advanced Color 또는 ICC/WCS 출력 |
 | `Resource.h` | 버튼, 아이콘 및 리소스 ID |
 | `DisplayColorTester.rc` | 아이콘과 매니페스트 리소스 |
 | `app.manifest` | Per-Monitor V2 DPI 및 Windows 호환성 선언 |
@@ -363,3 +380,21 @@
 - Advanced Color가 비활성화된 화면에서 해당 모니터의 ICC/WCS 변환 결과가 사용되는지 확인한다.
 - SDR/HDR 혼합 구성에서 모니터별 출력 경로가 독립적으로 선택되는지 확인한다.
 - 가능하면 Display-P3 지원 모니터와 계측 장비를 사용해 Red, Green, Blue 및 White의 색도와 휘도를 확인한다.
+
+## 11. 4차 구현 검증 항목
+
+### 11.1 자동 검증
+
+- x64 Debug와 x64 Release 구성을 모두 빌드한다.
+- Adobe RGB와 BT.2020 버튼이 범용 색상 관리 렌더러를 생성하는지 확인한다.
+- Display-P3 전용 변환 상수가 남아 있지 않고 세 광색역이 원색과 백색점에서 행렬을 계산하는지 확인한다.
+- 각 색역에서 D65 white가 scRGB `(1, 1, 1)`로 변환되는지 수치 검증한다.
+- 범용 색상 관리 렌더러가 GDI `RGB()` 또는 `COLORREF`를 사용하지 않는지 확인한다.
+
+### 11.2 수동 검증
+
+- 네 색역 버튼이 모두 활성화되어 각각 테스트 세션을 시작하는지 확인한다.
+- Adobe RGB와 BT.2020에서 여덟 색상, 입력, 오버레이, DPI, 커서 자동 숨김 및 `Esc` 종료가 동일하게 동작하는지 확인한다.
+- 오버레이에 `Adobe RGB - Red (#F00)` 또는 `BT.2020 - Red (#F00)` 형식의 현재 색역이 표시되는지 확인한다.
+- Advanced Color 활성/비활성 화면과 SDR/HDR 혼합 구성에서 모니터별 출력 경로를 확인한다.
+- 가능하면 각 색역을 지원하는 모니터와 계측 장비로 원색과 white의 색도·휘도를 확인한다.

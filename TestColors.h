@@ -25,6 +25,8 @@ enum class TestColorId
 enum class ColorTransferFunction
 {
     Srgb,
+    Power,
+    Bt2020,
 };
 
 struct Chromaticity
@@ -40,6 +42,7 @@ struct RgbColorSpaceDefinition
     Chromaticity bluePrimary;
     Chromaticity whitePoint;
     ColorTransferFunction transferFunction;
+    float calibratedGamma;
 };
 
 struct RgbColor
@@ -55,6 +58,7 @@ inline constexpr RgbColorSpaceDefinition kSrgbColorSpace{
     {0.1500F, 0.0600F},
     {0.3127F, 0.3290F},
     ColorTransferFunction::Srgb,
+    2.2F,
 };
 
 inline constexpr RgbColorSpaceDefinition kDisplayP3ColorSpace{
@@ -63,7 +67,43 @@ inline constexpr RgbColorSpaceDefinition kDisplayP3ColorSpace{
     {0.1500F, 0.0600F},
     {0.3127F, 0.3290F},
     ColorTransferFunction::Srgb,
+    2.2F,
 };
+
+inline constexpr RgbColorSpaceDefinition kAdobeRgbColorSpace{
+    {0.6400F, 0.3300F},
+    {0.2100F, 0.7100F},
+    {0.1500F, 0.0600F},
+    {0.3127F, 0.3290F},
+    ColorTransferFunction::Power,
+    2.19921875F,
+};
+
+inline constexpr RgbColorSpaceDefinition kBt2020ColorSpace{
+    {0.7080F, 0.2920F},
+    {0.1700F, 0.7970F},
+    {0.1310F, 0.0460F},
+    {0.3127F, 0.3290F},
+    ColorTransferFunction::Bt2020,
+    2.4F,
+};
+
+[[nodiscard]] constexpr const RgbColorSpaceDefinition& ColorSpaceDefinition(ColorGamut gamut) noexcept
+{
+    switch (gamut)
+    {
+    case ColorGamut::Srgb:
+        return kSrgbColorSpace;
+    case ColorGamut::DisplayP3:
+        return kDisplayP3ColorSpace;
+    case ColorGamut::AdobeRgb:
+        return kAdobeRgbColorSpace;
+    case ColorGamut::Bt2020:
+        return kBt2020ColorSpace;
+    }
+
+    return kSrgbColorSpace;
+}
 
 [[nodiscard]] constexpr const wchar_t* ColorGamutName(ColorGamut gamut) noexcept
 {

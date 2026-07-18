@@ -4,11 +4,11 @@
 
 namespace DisplayColorTester
 {
-class DisplayP3Renderer final : public TestRenderer
+class ColorManagedRenderer final : public TestRenderer
 {
 public:
-    DisplayP3Renderer() = default;
-    ~DisplayP3Renderer() override = default;
+    explicit ColorManagedRenderer(ColorGamut gamut) noexcept;
+    ~ColorManagedRenderer() override = default;
 
     bool AttachWindow(HWND window) noexcept override;
     void DetachWindow(HWND window) noexcept override;
@@ -53,7 +53,7 @@ private:
     [[nodiscard]] AdvancedColorState QueryAdvancedColorState(HMONITOR monitor) const;
     [[nodiscard]] bool BuildLegacySdrColors(HMONITOR monitor,
                                             std::array<RenderColor, 8>& colors) const;
-    [[nodiscard]] static std::array<RenderColor, 8> BuildAdvancedColorValues(float referenceWhiteScale) noexcept;
+    [[nodiscard]] std::array<RenderColor, 8> BuildAdvancedColorValues(float referenceWhiteScale) const noexcept;
     [[nodiscard]] static std::array<RenderColor, 8> BuildFallbackSdrValues() noexcept;
     [[nodiscard]] const WindowContext* FindWindowContext(HWND window) const noexcept;
 
@@ -64,6 +64,7 @@ private:
     Microsoft::WRL::ComPtr<ID2D1Device> d2dDevice_;
     Microsoft::WRL::ComPtr<IDWriteFactory> dwriteFactory_;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> textFormat_;
+    ColorGamut gamut_;
     std::vector<WindowContext> windowContexts_;
 };
 }

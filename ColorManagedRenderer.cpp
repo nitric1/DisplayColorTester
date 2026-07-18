@@ -1,6 +1,6 @@
 ﻿#include "Common.h"
 
-#include "DisplayP3Renderer.h"
+#include "ColorManagedRenderer.h"
 
 namespace DisplayColorTester
 {
@@ -10,6 +10,17 @@ constexpr float kTextSize = 40.0F;
 constexpr float kShadowOffset = 2.0F;
 constexpr float kWordMaximum = 65535.0F;
 constexpr double kFixed2Dot30Scale = 1073741824.0;
+
+struct Matrix3x3
+{
+    double values[3][3];
+};
+
+inline constexpr Matrix3x3 kXyzToLinearSrgb{{
+    {3.2409699419045226, -1.5373831775700940, -0.4986107602930034},
+    {-0.9692436362808796, 1.8759675015077202, 0.0415550574071756},
+    {0.0556300796969937, -0.2039769588889765, 1.0569715142428786},
+}};
 
 void SetLastErrorFromHResult(HRESULT result) noexcept
 {
@@ -34,11 +45,109 @@ long ToFixed2Dot30(double value) noexcept
     return static_cast<long>(value * kFixed2Dot30Scale + 0.5);
 }
 
+DWORD ToCalibratedGamma(float gamma) noexcept
+{
+    const unsigned fixed8Dot8 = static_cast<unsigned>(gamma * 256.0F + 0.5F);
+    return static_cast<DWORD>(fixed8Dot8 << 8);
+}
+
 void SetXyz(CIEXYZ& destination, double x, double y, double z) noexcept
 {
     destination.ciexyzX = ToFixed2Dot30(x);
     destination.ciexyzY = ToFixed2Dot30(y);
     destination.ciexyzZ = ToFixed2Dot30(z);
+}
+
+Matrix3x3 Invert(const Matrix3x3& matrix) noexcept
+{
+    const double(*m)[3] = matrix.values;
+    const double determinant =
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+        m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+        m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    const double inverseDeterminant = 1.0 / determinant;
+
+    Matrix3x3 inverse{};
+    inverse.values[0][0] = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inverseDeterminant;
+    inverse.values[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inverseDeterminant;
+    inverse.values[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inverseDeterminant;
+    inverse.values[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inverseDeterminant;
+    inverse.values[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inverseDeterminant;
+    inverse.values[1][2] = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inverseDeterminant;
+    inverse.values[2][0] = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inverseDeterminant;
+    inverse.values[2][1] = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inverseDeterminant;
+    inverse.values[2][2] = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inverseDeterminant;
+    return inverse;
+}
+
+Matrix3x3 Multiply(const Matrix3x3& left, const Matrix3x3& right) noexcept
+{
+    Matrix3x3 product{};
+    for (size_t row = 0; row < 3; ++row)
+    {
+        for (size_t column = 0; column < 3; ++column)
+        {
+            for (size_t index = 0; index < 3; ++index)
+            {
+                product.values[row][column] += left.values[row][index] * right.values[index][column];
+            }
+        }
+    }
+    return product;
+}
+
+Matrix3x3 BuildLinearRgbToXyz(const RgbColorSpaceDefinition& definition) noexcept
+{
+    const Chromaticity& red = definition.redPrimary;
+    const Chromaticity& green = definition.greenPrimary;
+    const Chromaticity& blue = definition.bluePrimary;
+    const Chromaticity& white = definition.whitePoint;
+    const Matrix3x3 unscaled{{
+        {red.x / red.y, green.x / green.y, blue.x / blue.y},
+        {1.0, 1.0, 1.0},
+        {(1.0 - red.x - red.y) / red.y,
+         (1.0 - green.x - green.y) / green.y,
+         (1.0 - blue.x - blue.y) / blue.y},
+    }};
+    const double whiteXyz[3]{
+        white.x / white.y,
+        1.0,
+        (1.0 - white.x - white.y) / white.y,
+    };
+    const Matrix3x3 inverse = Invert(unscaled);
+    double scale[3]{};
+    for (size_t row = 0; row < 3; ++row)
+    {
+        for (size_t column = 0; column < 3; ++column)
+        {
+            scale[row] += inverse.values[row][column] * whiteXyz[column];
+        }
+    }
+
+    Matrix3x3 result{};
+    for (size_t row = 0; row < 3; ++row)
+    {
+        for (size_t column = 0; column < 3; ++column)
+        {
+            result.values[row][column] = unscaled.values[row][column] * scale[column];
+        }
+    }
+    return result;
+}
+
+RgbColor Transform(const Matrix3x3& matrix, RgbColor color) noexcept
+{
+    return {
+        static_cast<float>(matrix.values[0][0] * color.red +
+                           matrix.values[0][1] * color.green +
+                           matrix.values[0][2] * color.blue),
+        static_cast<float>(matrix.values[1][0] * color.red +
+                           matrix.values[1][1] * color.green +
+                           matrix.values[1][2] * color.blue),
+        static_cast<float>(matrix.values[2][0] * color.red +
+                           matrix.values[2][1] * color.green +
+                           matrix.values[2][2] * color.blue),
+    };
 }
 
 bool GetDisplayProfilePath(HMONITOR monitor, std::wstring& profilePath)
@@ -87,7 +196,11 @@ bool GetDisplayProfilePath(HMONITOR monitor, std::wstring& profilePath)
 }
 }
 
-bool DisplayP3Renderer::AttachWindow(HWND window) noexcept
+ColorManagedRenderer::ColorManagedRenderer(ColorGamut gamut) noexcept : gamut_(gamut)
+{
+}
+
+bool ColorManagedRenderer::AttachWindow(HWND window) noexcept
 {
     if (FindWindowContext(window) != nullptr)
     {
@@ -116,7 +229,7 @@ bool DisplayP3Renderer::AttachWindow(HWND window) noexcept
     }
 }
 
-void DisplayP3Renderer::DetachWindow(HWND window) noexcept
+void ColorManagedRenderer::DetachWindow(HWND window) noexcept
 {
     const auto result = std::find_if(windowContexts_.begin(),
                                      windowContexts_.end(),
@@ -129,7 +242,7 @@ void DisplayP3Renderer::DetachWindow(HWND window) noexcept
     }
 }
 
-void DisplayP3Renderer::PaintWindow(HWND window, TestColorId color, bool overlayVisible) const noexcept
+void ColorManagedRenderer::PaintWindow(HWND window, TestColorId color, bool overlayVisible) const noexcept
 {
     PAINTSTRUCT paint{};
     HDC paintDc = BeginPaint(window, &paint);
@@ -165,7 +278,7 @@ void DisplayP3Renderer::PaintWindow(HWND window, TestColorId color, bool overlay
         ID2D1SolidColorBrush* shadowBrush = UseDarkText(color) ? context->lightBrush.Get() : context->darkBrush.Get();
         wchar_t overlayText[kTestOverlayTextCapacity]{};
         const unsigned textLength = static_cast<unsigned>(
-            FormatTestOverlayText(ColorGamut::DisplayP3, color, overlayText));
+            FormatTestOverlayText(gamut_, color, overlayText));
 
         context->d2dContext->BeginDraw();
         context->d2dContext->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -190,7 +303,7 @@ void DisplayP3Renderer::PaintWindow(HWND window, TestColorId color, bool overlay
     EndPaint(window, &paint);
 }
 
-bool DisplayP3Renderer::EnsureDeviceResources() noexcept
+bool ColorManagedRenderer::EnsureDeviceResources() noexcept
 {
     if (d3dDevice_ != nullptr)
     {
@@ -296,7 +409,7 @@ bool DisplayP3Renderer::EnsureDeviceResources() noexcept
     return true;
 }
 
-bool DisplayP3Renderer::CreateWindowContext(HWND window, WindowContext& context)
+bool ColorManagedRenderer::CreateWindowContext(HWND window, WindowContext& context)
 {
     const HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
     const AdvancedColorState advancedColor = QueryAdvancedColorState(monitor);
@@ -323,7 +436,7 @@ bool DisplayP3Renderer::CreateWindowContext(HWND window, WindowContext& context)
     return CreateSwapChainResources(window, format, colorSpace, referenceWhiteScale, context);
 }
 
-bool DisplayP3Renderer::CreateSwapChainResources(HWND window,
+bool ColorManagedRenderer::CreateSwapChainResources(HWND window,
                                                  DXGI_FORMAT format,
                                                  DXGI_COLOR_SPACE_TYPE colorSpace,
                                                  float referenceWhiteScale,
@@ -404,7 +517,7 @@ bool DisplayP3Renderer::CreateSwapChainResources(HWND window,
     return true;
 }
 
-DisplayP3Renderer::AdvancedColorState DisplayP3Renderer::QueryAdvancedColorState(HMONITOR monitor) const
+ColorManagedRenderer::AdvancedColorState ColorManagedRenderer::QueryAdvancedColorState(HMONITOR monitor) const
 {
     AdvancedColorState state{};
     MONITORINFOEXW monitorInfo{};
@@ -490,8 +603,8 @@ DisplayP3Renderer::AdvancedColorState DisplayP3Renderer::QueryAdvancedColorState
     return state;
 }
 
-bool DisplayP3Renderer::BuildLegacySdrColors(HMONITOR monitor,
-                                             std::array<RenderColor, 8>& colors) const
+bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
+                                                std::array<RenderColor, 8>& colors) const
 {
     std::wstring profilePath;
     if (!GetDisplayProfilePath(monitor, profilePath))
@@ -518,10 +631,21 @@ bool DisplayP3Renderer::BuildLegacySdrColors(HMONITOR monitor,
     source.lcsSize = sizeof(source);
     source.lcsCSType = LCS_CALIBRATED_RGB;
     source.lcsIntent = LCS_GM_GRAPHICS;
-    SetXyz(source.lcsEndpoints.ciexyzRed, 0.4865709486482162, 0.2289745640697488, 0.0);
-    SetXyz(source.lcsEndpoints.ciexyzGreen, 0.2656676931690931, 0.6917385218365064, 0.0451133818589026);
-    SetXyz(source.lcsEndpoints.ciexyzBlue, 0.1982172852343625, 0.0792869140937450, 1.0439443689009760);
-    source.lcsGammaRed = 0x00023300;
+    const RgbColorSpaceDefinition& definition = ColorSpaceDefinition(gamut_);
+    const Matrix3x3 sourceToXyz = BuildLinearRgbToXyz(definition);
+    SetXyz(source.lcsEndpoints.ciexyzRed,
+           sourceToXyz.values[0][0],
+           sourceToXyz.values[1][0],
+           sourceToXyz.values[2][0]);
+    SetXyz(source.lcsEndpoints.ciexyzGreen,
+           sourceToXyz.values[0][1],
+           sourceToXyz.values[1][1],
+           sourceToXyz.values[2][1]);
+    SetXyz(source.lcsEndpoints.ciexyzBlue,
+           sourceToXyz.values[0][2],
+           sourceToXyz.values[1][2],
+           sourceToXyz.values[2][2]);
+    source.lcsGammaRed = ToCalibratedGamma(definition.calibratedGamma);
     source.lcsGammaGreen = source.lcsGammaRed;
     source.lcsGammaBlue = source.lcsGammaRed;
 
@@ -567,24 +691,29 @@ bool DisplayP3Renderer::BuildLegacySdrColors(HMONITOR monitor,
     return true;
 }
 
-std::array<DisplayP3Renderer::RenderColor, 8>
-DisplayP3Renderer::BuildAdvancedColorValues(float referenceWhiteScale) noexcept
+std::array<ColorManagedRenderer::RenderColor, 8>
+ColorManagedRenderer::BuildAdvancedColorValues(float referenceWhiteScale) const noexcept
 {
     std::array<RenderColor, 8> colors{};
+    const Matrix3x3 sourceToScRgb = Multiply(kXyzToLinearSrgb,
+                                             BuildLinearRgbToXyz(ColorSpaceDefinition(gamut_)));
     for (size_t index = 0; index < colors.size(); ++index)
     {
-        const RgbColor p3 = TestColorRgb(kTestColorSequence[index]);
+        // Every test component is an endpoint (0 or 1), so all supported transfer
+        // functions map it to the same linear endpoint before matrix conversion.
+        const RgbColor source = TestColorRgb(kTestColorSequence[index]);
+        const RgbColor scRgb = Transform(sourceToScRgb, source);
         colors[index] = {
-            (1.22494017628F * p3.red - 0.224940176281F * p3.green) * referenceWhiteScale,
-            (-0.0420569547097F * p3.red + 1.04205695471F * p3.green) * referenceWhiteScale,
-            (-0.0196375545903F * p3.red - 0.0786360455506F * p3.green + 1.09827360014F * p3.blue) * referenceWhiteScale,
+            scRgb.red * referenceWhiteScale,
+            scRgb.green * referenceWhiteScale,
+            scRgb.blue * referenceWhiteScale,
             1.0F,
         };
     }
     return colors;
 }
 
-std::array<DisplayP3Renderer::RenderColor, 8> DisplayP3Renderer::BuildFallbackSdrValues() noexcept
+std::array<ColorManagedRenderer::RenderColor, 8> ColorManagedRenderer::BuildFallbackSdrValues() noexcept
 {
     std::array<RenderColor, 8> colors{};
     for (size_t index = 0; index < colors.size(); ++index)
@@ -595,7 +724,7 @@ std::array<DisplayP3Renderer::RenderColor, 8> DisplayP3Renderer::BuildFallbackSd
     return colors;
 }
 
-const DisplayP3Renderer::WindowContext* DisplayP3Renderer::FindWindowContext(HWND window) const noexcept
+const ColorManagedRenderer::WindowContext* ColorManagedRenderer::FindWindowContext(HWND window) const noexcept
 {
     const auto result = std::find_if(windowContexts_.begin(),
                                      windowContexts_.end(),

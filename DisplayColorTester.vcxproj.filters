@@ -21,7 +21,7 @@
     <ClInclude Include="Common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DisplayP3Renderer.h">
+    <ClInclude Include="ColorManagedRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GdiSrgbRenderer.h">
@@ -47,7 +47,7 @@
     <ClCompile Include="Common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="DisplayP3Renderer.cpp">
+    <ClCompile Include="ColorManagedRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="GdiSrgbRenderer.cpp">

@@ -153,8 +153,8 @@ bool Application::CreateButtons()
     constexpr std::array<ButtonDefinition, 4> definitions{{
         {IDC_GAMUT_SRGB, L"sRGB", true},
         {IDC_GAMUT_DISPLAY_P3, L"Display-P3 (P3-D65)", true},
-        {IDC_GAMUT_ADOBE_RGB, L"Adobe RGB", false},
-        {IDC_GAMUT_BT2020, L"BT.2020", false},
+        {IDC_GAMUT_ADOBE_RGB, L"Adobe RGB", true},
+        {IDC_GAMUT_BT2020, L"BT.2020", true},
     }};
 
     for (size_t index = 0; index < definitions.size(); ++index)
@@ -337,6 +337,16 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
         if (LOWORD(wParam) == IDC_GAMUT_DISPLAY_P3 && HIWORD(wParam) == BN_CLICKED)
         {
             StartTest(ColorGamut::DisplayP3, 1);
+            return 0;
+        }
+        if (LOWORD(wParam) == IDC_GAMUT_ADOBE_RGB && HIWORD(wParam) == BN_CLICKED)
+        {
+            StartTest(ColorGamut::AdobeRgb, 2);
+            return 0;
+        }
+        if (LOWORD(wParam) == IDC_GAMUT_BT2020 && HIWORD(wParam) == BN_CLICKED)
+        {
+            StartTest(ColorGamut::Bt2020, 3);
             return 0;
         }
         break;
