@@ -6,3 +6,12 @@
 #define NOMINMAX
 
 #include <windows.h>
+
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <exception>
+#include <memory>
+#include <new>
+#include <string>
+#include <vector>

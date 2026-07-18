@@ -1,0 +1,6 @@
+#pragma once
+
+#define IDC_GAMUT_SRGB 1001
+#define IDC_GAMUT_DISPLAY_P3 1002
+#define IDC_GAMUT_ADOBE_RGB 1003
+#define IDC_GAMUT_BT2020 1004
