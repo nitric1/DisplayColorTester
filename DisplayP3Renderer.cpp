@@ -385,6 +385,7 @@ bool DisplayP3Renderer::CreateSwapChainResources(HWND window,
         return false;
     }
     context.d2dContext->SetTarget(context.targetBitmap.Get());
+    context.d2dContext->SetDpi(dpi, dpi);
 
     const D2D1_COLOR_F dark = D2D1::ColorF(0.0F, 0.0F, 0.0F, 1.0F);
     const D2D1_COLOR_F light = D2D1::ColorF(referenceWhiteScale,
