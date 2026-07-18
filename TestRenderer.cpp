@@ -17,6 +17,7 @@ std::unique_ptr<TestRenderer> CreateTestRenderer(ColorGamut gamut)
     case ColorGamut::DisplayP3:
     case ColorGamut::AdobeRgb:
     case ColorGamut::Bt2020:
+    case ColorGamut::DisplayNative:
         return std::make_unique<ColorManagedRenderer>(gamut);
     }
 

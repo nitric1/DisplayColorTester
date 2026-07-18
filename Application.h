@@ -31,7 +31,7 @@ private:
 
     HINSTANCE instance_{};
     HWND mainWindow_{};
-    std::array<HWND, 4> buttons_{};
+    std::array<HWND, 5> buttons_{};
     HFONT mainFont_{};
     size_t lastStartedButtonIndex_{};
     std::unique_ptr<TestSession> testSession_;

@@ -113,7 +113,7 @@ bool Application::RegisterWindowClasses() const noexcept
 bool Application::CreateMainWindow(int showCommand)
 {
     const unsigned dpi = GetDpiForSystem();
-    RECT windowRect{0, 0, ScaleForDpi(520, dpi), ScaleForDpi(300, dpi)};
+    RECT windowRect{0, 0, ScaleForDpi(520, dpi), ScaleForDpi(380, dpi)};
     if (!AdjustWindowRectExForDpi(&windowRect, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi))
     {
         return false;
@@ -150,11 +150,12 @@ bool Application::CreateButtons()
         bool enabled;
     };
 
-    constexpr std::array<ButtonDefinition, 4> definitions{{
+    constexpr std::array<ButtonDefinition, 5> definitions{{
         {IDC_GAMUT_SRGB, L"sRGB", true},
         {IDC_GAMUT_DISPLAY_P3, L"Display-P3 (P3-D65)", true},
         {IDC_GAMUT_ADOBE_RGB, L"Adobe RGB", true},
         {IDC_GAMUT_BT2020, L"BT.2020", true},
+        {IDC_GAMUT_DISPLAY_NATIVE, L"Display Native RGB (Best effort)", true},
     }};
 
     for (size_t index = 0; index < definitions.size(); ++index)
@@ -201,21 +202,23 @@ void Application::LayoutButtons() const noexcept
     const int clientHeight = clientRect.bottom - clientRect.top;
     const int availableWidth = (std::max)(0, clientWidth - (padding * 2) - gap);
     const int buttonWidth = availableWidth / 2;
-    const int gridHeight = (buttonHeight * 2) + gap;
+    const int rowCount = static_cast<int>((buttons_.size() + 1) / 2);
+    const int gridHeight = (buttonHeight * rowCount) + (gap * (rowCount - 1));
     const int top = (std::max)(padding, (clientHeight - gridHeight) / 2);
 
     for (size_t index = 0; index < buttons_.size(); ++index)
     {
         const int column = static_cast<int>(index % 2);
         const int row = static_cast<int>(index / 2);
-        const int left = padding + column * (buttonWidth + gap);
+        const bool lastOddButton = index + 1 == buttons_.size() && (buttons_.size() % 2) != 0;
+        const int left = lastOddButton ? padding : padding + column * (buttonWidth + gap);
         const int y = top + row * (buttonHeight + gap);
 
         SetWindowPos(buttons_[index],
                      nullptr,
                      left,
                      y,
-                     buttonWidth,
+                     lastOddButton ? availableWidth + gap : buttonWidth,
                      buttonHeight,
                      SWP_NOACTIVATE | SWP_NOZORDER);
     }
@@ -349,6 +352,11 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
             StartTest(ColorGamut::Bt2020, 3);
             return 0;
         }
+        if (LOWORD(wParam) == IDC_GAMUT_DISPLAY_NATIVE && HIWORD(wParam) == BN_CLICKED)
+        {
+            StartTest(ColorGamut::DisplayNative, 4);
+            return 0;
+        }
         break;
 
     case WM_SIZE:
@@ -375,7 +383,7 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
         auto* minimums = reinterpret_cast<MINMAXINFO*>(lParam);
         const unsigned dpi = GetDpiForWindow(window);
         minimums->ptMinTrackSize.x = ScaleForDpi(420, dpi);
-        minimums->ptMinTrackSize.y = ScaleForDpi(250, dpi);
+        minimums->ptMinTrackSize.y = ScaleForDpi(330, dpi);
         return 0;
     }
 

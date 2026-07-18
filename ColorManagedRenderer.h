@@ -30,6 +30,15 @@ private:
         float sdrWhiteScale{1.0F};
     };
 
+    struct NativeDisplayState
+    {
+        bool primariesValid{};
+        bool fullFrameLuminanceValid{};
+        RgbColorSpaceDefinition colorSpace{kSrgbColorSpace};
+        unsigned bitsPerColor{};
+        float maxFullFrameLuminance{};
+    };
+
     struct WindowContext
     {
         HWND window{};
@@ -41,6 +50,7 @@ private:
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> darkBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> lightBrush;
+        std::array<wchar_t, 256> diagnosticText{};
     };
 
     bool EnsureDeviceResources() noexcept;
@@ -51,9 +61,12 @@ private:
                                   float referenceWhiteScale,
                                   WindowContext& context) noexcept;
     [[nodiscard]] AdvancedColorState QueryAdvancedColorState(HMONITOR monitor) const;
+    [[nodiscard]] NativeDisplayState QueryNativeDisplayState(HMONITOR monitor) const noexcept;
     [[nodiscard]] bool BuildLegacySdrColors(HMONITOR monitor,
                                             std::array<RenderColor, 8>& colors) const;
-    [[nodiscard]] std::array<RenderColor, 8> BuildAdvancedColorValues(float referenceWhiteScale) const noexcept;
+    [[nodiscard]] static std::array<RenderColor, 8> BuildAdvancedColorValues(
+        const RgbColorSpaceDefinition& colorSpace,
+        float referenceWhiteScale) noexcept;
     [[nodiscard]] static std::array<RenderColor, 8> BuildFallbackSdrValues() noexcept;
     [[nodiscard]] const WindowContext* FindWindowContext(HWND window) const noexcept;
 

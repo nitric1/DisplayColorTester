@@ -15,7 +15,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
+#include <cwchar>
 #include <exception>
 #include <memory>
 #include <new>

@@ -9,12 +9,15 @@ namespace
 constexpr float kTextSize = 40.0F;
 constexpr float kShadowOffset = 2.0F;
 constexpr float kWordMaximum = 65535.0F;
+constexpr float kSceneReferredWhiteNits = 80.0F;
 constexpr double kFixed2Dot30Scale = 1073741824.0;
 
 struct Matrix3x3
 {
     double values[3][3];
 };
+
+Matrix3x3 BuildLinearRgbToXyz(const RgbColorSpaceDefinition& definition) noexcept;
 
 inline constexpr Matrix3x3 kXyzToLinearSrgb{{
     {3.2409699419045226, -1.5373831775700940, -0.4986107602930034},
@@ -38,6 +41,58 @@ bool UseDarkText(TestColorId color) noexcept
 {
     return color == TestColorId::Green || color == TestColorId::Yellow ||
            color == TestColorId::Cyan || color == TestColorId::White;
+}
+
+bool IsValidChromaticity(Chromaticity value) noexcept
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) &&
+           value.x > 0.0F && value.y > 0.0F && value.x + value.y <= 1.0F;
+}
+
+bool IsValidColorSpace(const RgbColorSpaceDefinition& definition) noexcept
+{
+    if (!IsValidChromaticity(definition.redPrimary) ||
+        !IsValidChromaticity(definition.greenPrimary) ||
+        !IsValidChromaticity(definition.bluePrimary) ||
+        !IsValidChromaticity(definition.whitePoint))
+    {
+        return false;
+    }
+
+    const double twiceArea =
+        (definition.greenPrimary.x - definition.redPrimary.x) *
+            (definition.bluePrimary.y - definition.redPrimary.y) -
+        (definition.greenPrimary.y - definition.redPrimary.y) *
+            (definition.bluePrimary.x - definition.redPrimary.x);
+    if (std::abs(twiceArea) <= 0.000001)
+    {
+        return false;
+    }
+
+    const Matrix3x3 rgbToXyz = BuildLinearRgbToXyz(definition);
+    for (size_t row = 0; row < 3; ++row)
+    {
+        for (size_t column = 0; column < 3; ++column)
+        {
+            if (!std::isfinite(rgbToXyz.values[row][column]))
+            {
+                return false;
+            }
+        }
+    }
+    return rgbToXyz.values[1][0] > 0.0 &&
+           rgbToXyz.values[1][1] > 0.0 &&
+           rgbToXyz.values[1][2] > 0.0;
+}
+
+template <size_t Capacity>
+void AppendText(wchar_t (&destination)[Capacity], size_t& length, const wchar_t* source) noexcept
+{
+    while (*source != L'\0' && length + 1 < Capacity)
+    {
+        destination[length++] = *source++;
+    }
+    destination[length] = L'\0';
 }
 
 long ToFixed2Dot30(double value) noexcept
@@ -277,20 +332,24 @@ void ColorManagedRenderer::PaintWindow(HWND window, TestColorId color, bool over
         ID2D1SolidColorBrush* textBrush = UseDarkText(color) ? context->darkBrush.Get() : context->lightBrush.Get();
         ID2D1SolidColorBrush* shadowBrush = UseDarkText(color) ? context->lightBrush.Get() : context->darkBrush.Get();
         wchar_t overlayText[kTestOverlayTextCapacity]{};
-        const unsigned textLength = static_cast<unsigned>(
-            FormatTestOverlayText(gamut_, color, overlayText));
+        size_t textLength = FormatTestOverlayText(gamut_, color, overlayText);
+        if (context->diagnosticText[0] != L'\0')
+        {
+            AppendText(overlayText, textLength, L"\n");
+            AppendText(overlayText, textLength, context->diagnosticText.data());
+        }
 
         context->d2dContext->BeginDraw();
         context->d2dContext->SetTransform(D2D1::Matrix3x2F::Identity());
         context->d2dContext->DrawTextW(overlayText,
-                                      textLength,
+                                      static_cast<unsigned>(textLength),
                                       textFormat_.Get(),
                                       shadowRect,
                                       shadowBrush,
                                       D2D1_DRAW_TEXT_OPTIONS_NONE,
                                       DWRITE_MEASURING_MODE_NATURAL);
         context->d2dContext->DrawTextW(overlayText,
-                                      textLength,
+                                      static_cast<unsigned>(textLength),
                                       textFormat_.Get(),
                                       textRect,
                                       textBrush,
@@ -419,10 +478,94 @@ bool ColorManagedRenderer::CreateWindowContext(HWND window, WindowContext& conte
     float referenceWhiteScale = 1.0F;
     context.outputMode = OutputMode::LegacySdr;
 
-    if (advancedColor.active)
+    if (gamut_ == ColorGamut::DisplayNative)
+    {
+        if (advancedColor.active)
+        {
+            context.outputMode = OutputMode::AdvancedColor;
+            const NativeDisplayState nativeDisplay = QueryNativeDisplayState(monitor);
+            const RgbColorSpaceDefinition& sourceColorSpace = nativeDisplay.primariesValid
+                ? nativeDisplay.colorSpace
+                : (advancedColor.hdr ? kBt2020ColorSpace : kSrgbColorSpace);
+            float nativeWhiteScale = 1.0F;
+            if (advancedColor.hdr)
+            {
+                nativeWhiteScale = nativeDisplay.fullFrameLuminanceValid
+                    ? nativeDisplay.maxFullFrameLuminance / kSceneReferredWhiteNits
+                    : advancedColor.sdrWhiteScale;
+            }
+            context.colors = BuildAdvancedColorValues(sourceColorSpace, nativeWhiteScale);
+            format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+            colorSpace = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+            referenceWhiteScale = advancedColor.sdrWhiteScale;
+
+            const wchar_t* modeName = advancedColor.hdr ? L"HDR" : L"SDR";
+            int length{};
+            if (nativeDisplay.primariesValid)
+            {
+                length = swprintf_s(
+                    context.diagnosticText.data(),
+                    context.diagnosticText.size(),
+                    L"Advanced Color %ls | DXGI primaries (EDID/override) | %u bpc\n"
+                    L"R(%.4f, %.4f)  G(%.4f, %.4f)  B(%.4f, %.4f)  W(%.4f, %.4f)",
+                    modeName,
+                    nativeDisplay.bitsPerColor,
+                    nativeDisplay.colorSpace.redPrimary.x,
+                    nativeDisplay.colorSpace.redPrimary.y,
+                    nativeDisplay.colorSpace.greenPrimary.x,
+                    nativeDisplay.colorSpace.greenPrimary.y,
+                    nativeDisplay.colorSpace.bluePrimary.x,
+                    nativeDisplay.colorSpace.bluePrimary.y,
+                    nativeDisplay.colorSpace.whitePoint.x,
+                    nativeDisplay.colorSpace.whitePoint.y);
+            }
+            else
+            {
+                length = swprintf_s(
+                    context.diagnosticText.data(),
+                    context.diagnosticText.size(),
+                    L"Advanced Color %ls | reported primaries unavailable\n"
+                    L"%ls estimate | best effort",
+                    modeName,
+                    advancedColor.hdr ? L"BT.2020" : L"sRGB");
+            }
+            if (length >= 0 && advancedColor.hdr)
+            {
+                const size_t offset = static_cast<size_t>(length);
+                const int appended = nativeDisplay.fullFrameLuminanceValid
+                    ? swprintf_s(context.diagnosticText.data() + offset,
+                                 context.diagnosticText.size() - offset,
+                                 L"\nFull-frame white target: %.1f nits",
+                                 nativeDisplay.maxFullFrameLuminance)
+                    : swprintf_s(context.diagnosticText.data() + offset,
+                                 context.diagnosticText.size() - offset,
+                                 L"\nFull-frame luminance unavailable; SDR white estimate");
+                if (appended < 0)
+                {
+                    length = -1;
+                }
+            }
+            if (length < 0)
+            {
+                context.diagnosticText[0] = L'\0';
+            }
+        }
+        else
+        {
+            context.colors = BuildFallbackSdrValues();
+            constexpr wchar_t diagnostic[] =
+                L"Legacy SDR | full-range device RGB | ICC bypassed | best effort";
+            swprintf_s(context.diagnosticText.data(),
+                       context.diagnosticText.size(),
+                       L"%ls",
+                       diagnostic);
+        }
+    }
+    else if (advancedColor.active)
     {
         context.outputMode = OutputMode::AdvancedColor;
-        context.colors = BuildAdvancedColorValues(advancedColor.sdrWhiteScale);
+        context.colors = BuildAdvancedColorValues(ColorSpaceDefinition(gamut_),
+                                                  advancedColor.sdrWhiteScale);
         format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         colorSpace = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
         referenceWhiteScale = advancedColor.sdrWhiteScale;
@@ -603,6 +746,67 @@ ColorManagedRenderer::AdvancedColorState ColorManagedRenderer::QueryAdvancedColo
     return state;
 }
 
+ColorManagedRenderer::NativeDisplayState
+ColorManagedRenderer::QueryNativeDisplayState(HMONITOR monitor) const noexcept
+{
+    NativeDisplayState state{};
+    for (unsigned adapterIndex = 0;; ++adapterIndex)
+    {
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+        const HRESULT adapterResult = dxgiFactory_->EnumAdapters1(adapterIndex, &adapter);
+        if (adapterResult == DXGI_ERROR_NOT_FOUND)
+        {
+            break;
+        }
+        if (FAILED(adapterResult))
+        {
+            return state;
+        }
+
+        for (unsigned outputIndex = 0;; ++outputIndex)
+        {
+            Microsoft::WRL::ComPtr<IDXGIOutput> output;
+            const HRESULT outputResult = adapter->EnumOutputs(outputIndex, &output);
+            if (outputResult == DXGI_ERROR_NOT_FOUND)
+            {
+                break;
+            }
+            if (FAILED(outputResult))
+            {
+                return state;
+            }
+
+            Microsoft::WRL::ComPtr<IDXGIOutput6> output6;
+            DXGI_OUTPUT_DESC1 description{};
+            if (FAILED(output.As(&output6)) || FAILED(output6->GetDesc1(&description)) ||
+                description.Monitor != monitor)
+            {
+                continue;
+            }
+
+            state.bitsPerColor = description.BitsPerColor;
+            state.maxFullFrameLuminance = description.MaxFullFrameLuminance;
+            state.fullFrameLuminanceValid =
+                std::isfinite(description.MaxFullFrameLuminance) &&
+                std::isfinite(description.MaxLuminance) &&
+                description.MaxFullFrameLuminance > 0.0F &&
+                description.MaxLuminance > 0.0F &&
+                description.MaxFullFrameLuminance <= description.MaxLuminance;
+            state.colorSpace = {
+                {description.RedPrimary[0], description.RedPrimary[1]},
+                {description.GreenPrimary[0], description.GreenPrimary[1]},
+                {description.BluePrimary[0], description.BluePrimary[1]},
+                {description.WhitePoint[0], description.WhitePoint[1]},
+                ColorTransferFunction::Srgb,
+                2.2F,
+            };
+            state.primariesValid = IsValidColorSpace(state.colorSpace);
+            return state;
+        }
+    }
+    return state;
+}
+
 bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
                                                 std::array<RenderColor, 8>& colors) const
 {
@@ -692,11 +896,12 @@ bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
 }
 
 std::array<ColorManagedRenderer::RenderColor, 8>
-ColorManagedRenderer::BuildAdvancedColorValues(float referenceWhiteScale) const noexcept
+ColorManagedRenderer::BuildAdvancedColorValues(const RgbColorSpaceDefinition& colorSpace,
+                                               float referenceWhiteScale) noexcept
 {
     std::array<RenderColor, 8> colors{};
     const Matrix3x3 sourceToScRgb = Multiply(kXyzToLinearSrgb,
-                                             BuildLinearRgbToXyz(ColorSpaceDefinition(gamut_)));
+                                             BuildLinearRgbToXyz(colorSpace));
     for (size_t index = 0; index < colors.size(); ++index)
     {
         // Every test component is an endpoint (0 or 1), so all supported transfer

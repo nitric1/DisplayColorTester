@@ -94,6 +94,8 @@
 
 ### 3.5 5차 구현: Display Native RGB 한계 출력
 
+상태: 완료
+
 표준 색역 지원을 완료한 뒤 `Display Native RGB (Best effort)` 모드를 추가한다. 이 모드는 색 정확도 확인이 아니라 각 디스플레이가 보고한 native RGB gamut의 꼭짓점과 장치 RGB 최대 코드값을 확인하기 위한 진단 기능이다.
 
 - 메인 창 마지막에 `Display Native RGB (Best effort)` 버튼을 추가한다.
@@ -103,6 +105,15 @@
 - Windows Advanced Color 활성 여부, 디스플레이의 보고된 원색 좌표와 프로필 신뢰도를 화면 또는 진단 정보에서 확인할 수 있게 한다.
 - 디스플레이 정보가 누락되거나 모순되면 이 모드를 비활성화하거나 결과가 추정값임을 명확히 표시한다.
 - 이 모드는 물리 subpixel의 직접 구동이나 측정 장비 수준의 최대 휘도를 보장하지 않는다고 UI와 문서에 명시한다.
+
+구현된 출력 정책은 다음과 같다.
+
+- Advanced Color 활성 모니터에서는 `IDXGIOutput6::GetDesc1`이 보고한 원색과 백색점으로 native linear RGB-to-scRGB 행렬을 계산한다.
+- HDR 모니터의 전체화면 white 기준은 유효한 `MaxFullFrameLuminance / 80 nit`이며, 정보가 없으면 Windows의 SDR white level을 추정 기준으로 사용한다.
+- Advanced Color SDR에서는 FP16 scRGB `1.0`을 디스플레이의 기준 white 최대값으로 사용한다.
+- 보고된 원색 좌표가 유효하지 않으면 HDR은 BT.2020, SDR은 sRGB를 추정값으로 사용하고 오버레이에 이를 명시한다.
+- legacy SDR에서는 ICC/WCS 변환을 적용하지 않고 8-bit full-range device RGB 끝값을 직접 출력한다.
+- 각 모니터의 오버레이에 Advanced Color HDR/SDR 또는 legacy SDR 경로, bit depth, 보고된 원색/백색점 또는 추정 상태를 표시한다.
 
 ## 4. 1차 구현 상세 계획
 
@@ -333,8 +344,11 @@
 - Advanced Color가 활성화된 환경에서는 flip-model DXGI swap chain과 FP16 scRGB 출력을 사용한다.
 - `IDXGIOutput6::GetDesc1`의 원색 좌표, 백색점, 색 공간 및 휘도 정보를 모니터별로 수집한다.
 - 보고된 native primary를 scRGB 좌표로 변환하여 출력하고, Windows의 디스플레이 변환과 clipping을 거쳐 대상 디스플레이의 gamut 경계에 도달하도록 한다.
+- HDR 전체화면 출력은 `MaxFullFrameLuminance`를 80 nit scRGB 기준으로 환산해 native RGB white와 각 채널 끝점의 기준 scale로 사용한다.
+- Advanced Color SDR은 scRGB `(1, 1, 1)`이 디스플레이 최대 white로 해석되는 Windows 정책에 따라 scale `1.0`을 사용한다.
 - Advanced Color가 비활성화된 legacy SDR 환경에서는 Windows가 앱 출력에 시스템 색 관리를 적용하지 않는 특성을 이용해 full-range device RGB 코드값을 출력한다.
 - 서로 다른 모니터에는 같은 논리 색상을 표시하되, native gamut이 다르므로 실제 색도와 변환값은 모니터별로 달라질 수 있다.
+- 원색 정보가 누락되거나 유효하지 않으면 HDR은 BT.2020, SDR은 sRGB 추정값으로 계속 출력하고 해당 모니터 오버레이에 추정임을 표시한다.
 
 ### 9.3 보장할 수 없는 사항
 
@@ -348,13 +362,13 @@
 
 따라서 이 기능은 `Display Native RGB (Best effort)`로 명명한다. “각 채널에 가능한 최대 디지털 입력을 제공하고 native gamut 경계를 목표로 한다”는 것은 구현할 수 있지만, “각 물리 subpixel이 실제 최대 밝기로 발광한다”는 것은 소프트웨어만으로 검증하거나 보장할 수 없다. 정확한 확인에는 색도계 또는 분광측색계 측정이 필요하다.
 
-### 9.4 구현 전 검증 과제
+### 9.4 구현 정책과 후속 계측 과제
 
-1. Advanced Color가 켜진 SDR 디스플레이를 Win32에서 신뢰성 있게 식별할 방법을 확정한다.
-2. `DXGI_OUTPUT_DESC1` 원색 정보와 ICC/MHC 프로필 정보가 서로 다른 경우의 우선순위를 정한다.
-3. native primary의 xy 좌표와 기준 휘도를 scRGB 값으로 변환하는 행렬을 검증한다.
-4. HDR과 SDR에서 `1.0`의 휘도 해석이 다른 점을 반영해 최대 채널과 최대 휘도 정책을 분리한다.
-5. OS 색상 관리 활성/비활성 상태별 결과를 계측 장비로 비교한다.
+1. `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`를 우선 사용하고 구형 API를 fallback으로 사용해 Advanced Color HDR/SDR 활성 상태를 구분한다.
+2. Advanced Color에서는 현재 출력 경로의 `DXGI_OUTPUT_DESC1` 정보를 우선하며, legacy SDR에서는 프로필을 우회한 device RGB 끝값을 사용한다.
+3. native primary의 xy 좌표와 white point로 RGB-to-XYZ 행렬을 계산한 뒤 linear sRGB/scRGB로 변환한다.
+4. HDR은 `MaxFullFrameLuminance / 80 nit`, Advanced Color SDR은 `1.0`, legacy SDR은 8-bit full-range code value를 사용해 밝기 정책을 분리한다.
+5. OS 색상 관리 활성/비활성 상태별 실제 색도와 휘도는 계측 장비로 후속 비교한다.
 
 참고 자료:
 
@@ -398,3 +412,22 @@
 - 오버레이에 `Adobe RGB - Red (#F00)` 또는 `BT.2020 - Red (#F00)` 형식의 현재 색역이 표시되는지 확인한다.
 - Advanced Color 활성/비활성 화면과 SDR/HDR 혼합 구성에서 모니터별 출력 경로를 확인한다.
 - 가능하면 각 색역을 지원하는 모니터와 계측 장비로 원색과 white의 색도·휘도를 확인한다.
+
+## 12. 5차 구현 검증 항목
+
+### 12.1 자동 검증
+
+- x64 Debug와 x64 Release 구성을 모두 빌드한다.
+- 다섯 번째 버튼이 `DisplayNative` 렌더러를 생성하는지 확인한다.
+- 보고된 원색 좌표 검증, native RGB-to-scRGB 행렬 계산 및 모니터별 상태 저장을 확인한다.
+- Advanced Color native 출력이 FP16 scRGB swap chain을 사용하고 legacy SDR 출력이 ICC/WCS 변환을 우회하는지 확인한다.
+- 표준 헤더, Win32 callback 표기 및 정수 타입 사용이 프로젝트 지침을 따르는지 검사한다.
+
+### 12.2 수동 검증
+
+- 다섯 개 버튼이 모두 활성화되고 `Display Native RGB (Best effort)`가 모든 활성 모니터에서 시작되는지 확인한다.
+- 여덟 색상, 좌우 입력, 오버레이, DPI, 커서 자동 숨김 및 `Esc` 종료가 기존 모드와 동일하게 동작하는지 확인한다.
+- 각 모니터 오버레이에 Advanced Color HDR/SDR 또는 legacy SDR 출력 경로가 올바르게 표시되는지 확인한다.
+- Advanced Color에서는 보고된 원색/백색점과 bit depth가 표시되고, 유효하지 않은 정보에는 BT.2020 또는 sRGB 추정 상태가 표시되는지 확인한다.
+- legacy SDR에서는 full-range device RGB와 ICC bypass 상태가 표시되는지 확인한다.
+- 가능하면 계측 장비로 각 primary와 white의 색도·전체화면 휘도를 측정하고, 모니터 내부 처리에 따른 차이를 기록한다.

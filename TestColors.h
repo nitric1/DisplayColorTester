@@ -8,6 +8,7 @@ enum class ColorGamut
     DisplayP3,
     AdobeRgb,
     Bt2020,
+    DisplayNative,
 };
 
 enum class TestColorId
@@ -100,6 +101,8 @@ inline constexpr RgbColorSpaceDefinition kBt2020ColorSpace{
         return kAdobeRgbColorSpace;
     case ColorGamut::Bt2020:
         return kBt2020ColorSpace;
+    case ColorGamut::DisplayNative:
+        return kSrgbColorSpace;
     }
 
     return kSrgbColorSpace;
@@ -117,6 +120,8 @@ inline constexpr RgbColorSpaceDefinition kBt2020ColorSpace{
         return L"Adobe RGB";
     case ColorGamut::Bt2020:
         return L"BT.2020";
+    case ColorGamut::DisplayNative:
+        return L"Display Native RGB (Best effort)";
     }
 
     return L"Unknown";
@@ -144,7 +149,7 @@ inline constexpr std::array<const wchar_t*, 8> kTestColorNames{{
     L"Black (#000)",
 }};
 
-inline constexpr size_t kTestOverlayTextCapacity = 96;
+inline constexpr size_t kTestOverlayTextCapacity = 384;
 
 [[nodiscard]] constexpr const wchar_t* TestColorName(TestColorId color) noexcept
 {
