@@ -1,10 +1,12 @@
 # DisplayColorTester
 
-DisplayColorTester is a native Win32 C++ utility for showing the same sRGB test color on every active monitor.
+DisplayColorTester is a native Win32 C++ utility for showing the same selected-gamut test color on every active monitor.
 
 ## Current scope
 
 - sRGB output through Win32 GDI `RGB(r, g, b)`
+- Display-P3 output through FP16 scRGB on Advanced Color displays
+- Display-P3 output through per-monitor ICC/WCS conversion on legacy SDR displays
 - One borderless windowed-fullscreen window per active monitor
 - Color sequence: `#F00`, `#0F0`, `#00F`, `#FF0`, `#F0F`, `#0FF`, `#FFF`, `#000`
 - Previous color: Left Arrow or right mouse button
@@ -13,7 +15,7 @@ DisplayColorTester is a native Win32 C++ utility for showing the same sRGB test 
 - Color-name and hex-code overlay for one second after each change
 - Mouse cursor hidden after one second without mouse movement
 
-Display-P3, Adobe RGB, BT.2020, ICC/WCS, and Windows Advanced Color output are planned but are not enabled yet.
+Adobe RGB, BT.2020, and Display Native RGB output are planned but are not enabled yet.
 
 ## Build
 

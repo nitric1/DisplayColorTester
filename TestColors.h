@@ -22,6 +22,49 @@ enum class TestColorId
     Black,
 };
 
+enum class ColorTransferFunction
+{
+    Srgb,
+};
+
+struct Chromaticity
+{
+    float x;
+    float y;
+};
+
+struct RgbColorSpaceDefinition
+{
+    Chromaticity redPrimary;
+    Chromaticity greenPrimary;
+    Chromaticity bluePrimary;
+    Chromaticity whitePoint;
+    ColorTransferFunction transferFunction;
+};
+
+struct RgbColor
+{
+    float red;
+    float green;
+    float blue;
+};
+
+inline constexpr RgbColorSpaceDefinition kSrgbColorSpace{
+    {0.6400F, 0.3300F},
+    {0.3000F, 0.6000F},
+    {0.1500F, 0.0600F},
+    {0.3127F, 0.3290F},
+    ColorTransferFunction::Srgb,
+};
+
+inline constexpr RgbColorSpaceDefinition kDisplayP3ColorSpace{
+    {0.6800F, 0.3200F},
+    {0.2650F, 0.6900F},
+    {0.1500F, 0.0600F},
+    {0.3127F, 0.3290F},
+    ColorTransferFunction::Srgb,
+};
+
 [[nodiscard]] constexpr const wchar_t* ColorGamutName(ColorGamut gamut) noexcept
 {
     switch (gamut)
@@ -64,5 +107,30 @@ inline constexpr std::array<const wchar_t*, 8> kTestColorNames{{
 [[nodiscard]] constexpr const wchar_t* TestColorName(TestColorId color) noexcept
 {
     return kTestColorNames[static_cast<size_t>(color)];
+}
+
+[[nodiscard]] constexpr RgbColor TestColorRgb(TestColorId color) noexcept
+{
+    switch (color)
+    {
+    case TestColorId::Red:
+        return {1.0F, 0.0F, 0.0F};
+    case TestColorId::Green:
+        return {0.0F, 1.0F, 0.0F};
+    case TestColorId::Blue:
+        return {0.0F, 0.0F, 1.0F};
+    case TestColorId::Yellow:
+        return {1.0F, 1.0F, 0.0F};
+    case TestColorId::Magenta:
+        return {1.0F, 0.0F, 1.0F};
+    case TestColorId::Cyan:
+        return {0.0F, 1.0F, 1.0F};
+    case TestColorId::White:
+        return {1.0F, 1.0F, 1.0F};
+    case TestColorId::Black:
+        return {0.0F, 0.0F, 0.0F};
+    }
+
+    return {};
 }
 }

@@ -6,6 +6,12 @@
 #define NOMINMAX
 
 #include <windows.h>
+#include <d2d1_1.h>
+#include <d3d11.h>
+#include <dwrite.h>
+#include <dxgi1_6.h>
+#include <icm.h>
+#include <wrl/client.h>
 
 #include <algorithm>
 #include <array>

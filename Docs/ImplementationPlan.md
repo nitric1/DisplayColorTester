@@ -51,10 +51,21 @@
 
 ### 3.3 3차 구현: Display-P3 지원
 
+상태: 구현 완료, 수동 출력 검증 대기
+
 - `Display-P3 (P3-D65)` 버튼을 활성화한다.
 - Display-P3 원색 좌표, D65 백색점 및 필요한 전달 함수를 색역 정의에 추가한다.
 - 일반 SDR과 Windows Advanced Color 환경에 맞는 렌더링 경로를 결정하고 구현한다.
 - sRGB와 Display-P3 출력이 동일한 `RGB()` 호출로 처리되지 않도록 색 변환 계층을 사용한다.
+
+구현된 출력 정책은 다음과 같다.
+
+- Display-P3는 DCI-P3 원색, D65 백색점과 sRGB 전달 함수를 사용하는 색 공간으로 정의한다.
+- Windows Advanced Color가 활성화된 모니터에는 Display-P3의 선형 RGB를 선형 scRGB로 변환하여 `DXGI_FORMAT_R16G16B16A16_FLOAT` flip-model swap chain으로 출력한다.
+- HDR 모니터에서는 Windows의 현재 SDR white level을 적용하여 Display-P3 SDR 기준 흰색의 휘도를 보정한다.
+- Advanced Color가 비활성화된 legacy SDR 모니터에는 Display-P3에서 현재 모니터 ICC 프로필로 WCS relative-colorimetric 변환한 device RGB 값을 `DXGI_FORMAT_B8G8R8A8_UNORM` swap chain으로 출력한다.
+- 모니터 프로필을 얻거나 변환할 수 없는 legacy SDR 환경에서는 재현 가능한 sRGB gamut 경계로 clipping하는 fallback 값을 사용한다.
+- Direct2D와 DirectWrite는 DirectX swap chain 위의 1초 오버레이만 담당하며, 테스트 배경색은 GDI `RGB()`를 통과하지 않는다.
 
 ### 3.4 4차 구현: Adobe RGB 및 BT.2020 지원
 
@@ -211,6 +222,9 @@
 | `Application.h/.cpp` | 애플리케이션과 메인 창 수명 관리 |
 | `TestSession.h/.cpp` | 모니터 열거, 테스트 창 집합, 색상 상태, 입력 명령 |
 | `TestColors.h` | 색역·논리 색상 ID, 표시 순서와 색상 이름/코드 테이블 |
+| `TestRenderer.h/.cpp` | 색역별 렌더러 인터페이스와 생성 |
+| `GdiSrgbRenderer.h/.cpp` | 기존 GDI sRGB 출력 |
+| `DisplayP3Renderer.h/.cpp` | 모니터별 Advanced Color 또는 ICC/WCS 기반 Display-P3 출력 |
 | `Resource.h` | 버튼, 아이콘 및 리소스 ID |
 | `DisplayColorTester.rc` | 아이콘과 매니페스트 리소스 |
 | `app.manifest` | Per-Monitor V2 DPI 및 Windows 호환성 선언 |
@@ -330,3 +344,22 @@
 - [Use DirectX with Advanced Color on high/standard dynamic range displays](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range)
 - [ICC profile behavior with Advanced Color](https://learn.microsoft.com/en-us/windows/win32/wcs/advanced-color-icc-profiles)
 - [DXGI_OUTPUT_DESC1 structure](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_6/ns-dxgi1_6-dxgi_output_desc1)
+
+## 10. 3차 구현 검증 항목
+
+### 10.1 자동 검증
+
+- x64 Debug와 x64 Release 구성을 모두 빌드한다.
+- 새 DirectX/WCS 소스가 프로젝트와 필터 파일에 등록되었는지 확인한다.
+- Display-P3 렌더러가 GDI `RGB()` 또는 `COLORREF`를 사용하지 않는지 확인한다.
+- C/C++ 표준 헤더와 Win32 정수 타입 사용이 프로젝트 지침을 따르는지 검사한다.
+
+### 10.2 수동 검증
+
+- sRGB 테스트가 2차 구현과 동일하게 동작하는지 회귀 확인한다.
+- Display-P3 버튼이 활성화되고 모든 활성 모니터에 테스트 창이 생성되는지 확인한다.
+- 키보드, 마우스, 오버레이, 커서 자동 숨김 및 `Esc` 종료가 Display-P3에서도 동일하게 동작하는지 확인한다.
+- Advanced Color가 활성화된 화면에서 FP16 scRGB 경로로 출력되는지 확인한다.
+- Advanced Color가 비활성화된 화면에서 해당 모니터의 ICC/WCS 변환 결과가 사용되는지 확인한다.
+- SDR/HDR 혼합 구성에서 모니터별 출력 경로가 독립적으로 선택되는지 확인한다.
+- 가능하면 Display-P3 지원 모니터와 계측 장비를 사용해 Red, Green, Blue 및 White의 색도와 휘도를 확인한다.

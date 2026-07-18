@@ -152,7 +152,7 @@ bool Application::CreateButtons()
 
     constexpr std::array<ButtonDefinition, 4> definitions{{
         {IDC_GAMUT_SRGB, L"sRGB", true},
-        {IDC_GAMUT_DISPLAY_P3, L"Display-P3 (P3-D65)", false},
+        {IDC_GAMUT_DISPLAY_P3, L"Display-P3 (P3-D65)", true},
         {IDC_GAMUT_ADOBE_RGB, L"Adobe RGB", false},
         {IDC_GAMUT_BT2020, L"BT.2020", false},
     }};
@@ -266,14 +266,14 @@ void Application::RecreateMainFont()
     }
 }
 
-void Application::StartSrgbTest()
+void Application::StartTest(ColorGamut gamut, size_t buttonIndex)
 {
     if (testSession_ != nullptr)
     {
         return;
     }
 
-    auto session = std::make_unique<TestSession>(instance_, mainWindow_, ColorGamut::Srgb);
+    auto session = std::make_unique<TestSession>(instance_, mainWindow_, gamut);
     ShowWindow(mainWindow_, SW_HIDE);
     if (!session->Start())
     {
@@ -287,6 +287,7 @@ void Application::StartSrgbTest()
         return;
     }
 
+    lastStartedButtonIndex_ = buttonIndex;
     testSession_ = std::move(session);
 }
 
@@ -300,7 +301,7 @@ void Application::FinishTestSession(bool displayConfigurationChanged)
 
     ShowWindow(mainWindow_, SW_SHOW);
     SetForegroundWindow(mainWindow_);
-    SetFocus(buttons_[0]);
+    SetFocus(buttons_[lastStartedButtonIndex_]);
 
     if (displayConfigurationChanged)
     {
@@ -330,7 +331,12 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
     case WM_COMMAND:
         if (LOWORD(wParam) == IDC_GAMUT_SRGB && HIWORD(wParam) == BN_CLICKED)
         {
-            StartSrgbTest();
+            StartTest(ColorGamut::Srgb, 0);
+            return 0;
+        }
+        if (LOWORD(wParam) == IDC_GAMUT_DISPLAY_P3 && HIWORD(wParam) == BN_CLICKED)
+        {
+            StartTest(ColorGamut::DisplayP3, 1);
             return 0;
         }
         break;

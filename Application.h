@@ -2,6 +2,7 @@
 
 namespace DisplayColorTester
 {
+enum class ColorGamut;
 class TestSession;
 
 class Application final
@@ -23,7 +24,7 @@ private:
     bool CreateButtons();
     void LayoutButtons() const noexcept;
     void RecreateMainFont();
-    void StartSrgbTest();
+    void StartTest(ColorGamut gamut, size_t buttonIndex);
     void FinishTestSession(bool displayConfigurationChanged);
     void CloseTestSession() noexcept;
     LRESULT HandleMainWindowMessage(HWND window, unsigned message, WPARAM wParam, LPARAM lParam);
@@ -32,6 +33,7 @@ private:
     HWND mainWindow_{};
     std::array<HWND, 4> buttons_{};
     HFONT mainFont_{};
+    size_t lastStartedButtonIndex_{};
     std::unique_ptr<TestSession> testSession_;
 };
 }
