@@ -12,7 +12,7 @@ DisplayColorTester is a native Win32 C++ utility for showing the same selected-g
 - Previous color: Left Arrow or right mouse button
 - Next color: Right Arrow or left mouse button
 - Exit the test: Escape
-- Color-name and hex-code overlay for one second after each change
+- Gamut-name, color-name, and hex-code overlay for one second after each change
 - Mouse cursor hidden after one second without mouse movement
 
 Adobe RGB, BT.2020, and Display Native RGB output are planned but are not enabled yet.

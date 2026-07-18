@@ -163,19 +163,20 @@ void DisplayP3Renderer::PaintWindow(HWND window, TestColorId color, bool overlay
                                                    targetSize.height + kShadowOffset);
         ID2D1SolidColorBrush* textBrush = UseDarkText(color) ? context->darkBrush.Get() : context->lightBrush.Get();
         ID2D1SolidColorBrush* shadowBrush = UseDarkText(color) ? context->lightBrush.Get() : context->darkBrush.Get();
-        const wchar_t* text = TestColorName(color);
-        const unsigned textLength = static_cast<unsigned>(lstrlenW(text));
+        wchar_t overlayText[kTestOverlayTextCapacity]{};
+        const unsigned textLength = static_cast<unsigned>(
+            FormatTestOverlayText(ColorGamut::DisplayP3, color, overlayText));
 
         context->d2dContext->BeginDraw();
         context->d2dContext->SetTransform(D2D1::Matrix3x2F::Identity());
-        context->d2dContext->DrawTextW(text,
+        context->d2dContext->DrawTextW(overlayText,
                                       textLength,
                                       textFormat_.Get(),
                                       shadowRect,
                                       shadowBrush,
                                       D2D1_DRAW_TEXT_OPTIONS_NONE,
                                       DWRITE_MEASURING_MODE_NATURAL);
-        context->d2dContext->DrawTextW(text,
+        context->d2dContext->DrawTextW(overlayText,
                                       textLength,
                                       textFormat_.Get(),
                                       textRect,

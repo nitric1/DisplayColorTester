@@ -140,14 +140,16 @@ void GdiSrgbRenderer::PaintWindow(HWND window, TestColorId color, bool overlayVi
         const unsigned dpi = context != nullptr ? context->dpi : USER_DEFAULT_SCREEN_DPI;
         const int shadowOffset = (std::max)(1, ScaleForDpi(2, dpi));
         constexpr unsigned textFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+        wchar_t overlayText[kTestOverlayTextCapacity]{};
+        FormatTestOverlayText(ColorGamut::Srgb, color, overlayText);
 
         RECT shadowRect = clientRect;
         OffsetRect(&shadowRect, shadowOffset, shadowOffset);
         SetTextColor(dc, shadowColor);
-        DrawTextW(dc, TestColorName(color), -1, &shadowRect, textFormat);
+        DrawTextW(dc, overlayText, -1, &shadowRect, textFormat);
 
         SetTextColor(dc, textColor);
-        DrawTextW(dc, TestColorName(color), -1, &clientRect, textFormat);
+        DrawTextW(dc, overlayText, -1, &clientRect, textFormat);
         SelectObject(dc, previousFont);
     }
 

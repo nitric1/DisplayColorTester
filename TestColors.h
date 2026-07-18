@@ -104,9 +104,32 @@ inline constexpr std::array<const wchar_t*, 8> kTestColorNames{{
     L"Black (#000)",
 }};
 
+inline constexpr size_t kTestOverlayTextCapacity = 96;
+
 [[nodiscard]] constexpr const wchar_t* TestColorName(TestColorId color) noexcept
 {
     return kTestColorNames[static_cast<size_t>(color)];
+}
+
+template <size_t Capacity>
+size_t FormatTestOverlayText(ColorGamut gamut,
+                             TestColorId color,
+                             wchar_t (&buffer)[Capacity]) noexcept
+{
+    static_assert(Capacity > 0);
+    size_t length{};
+    const auto append = [&buffer, &length](const wchar_t* source) noexcept {
+        while (*source != L'\0' && length + 1 < Capacity)
+        {
+            buffer[length++] = *source++;
+        }
+    };
+
+    append(ColorGamutName(gamut));
+    append(L" - ");
+    append(TestColorName(color));
+    buffer[length] = L'\0';
+    return length;
 }
 
 [[nodiscard]] constexpr RgbColor TestColorRgb(TestColorId color) noexcept
