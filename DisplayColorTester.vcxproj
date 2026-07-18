@@ -86,8 +86,10 @@
   <ItemGroup>
     <ClInclude Include="Application.h" />
     <ClInclude Include="Common.h" />
+    <ClInclude Include="GdiSrgbRenderer.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="TestColors.h" />
+    <ClInclude Include="TestRenderer.h" />
     <ClInclude Include="TestSession.h" />
   </ItemGroup>
   <ItemGroup>
@@ -98,7 +100,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Common.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="GdiSrgbRenderer.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="TestRenderer.cpp" />
     <ClCompile Include="TestSession.cpp" />
   </ItemGroup>
   <ItemGroup>

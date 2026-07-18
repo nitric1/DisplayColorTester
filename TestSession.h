@@ -1,5 +1,7 @@
 #pragma once
 
+#include "TestRenderer.h"
+
 namespace DisplayColorTester
 {
 inline constexpr unsigned kTestSessionEndedMessage = WM_APP + 1;
@@ -7,7 +9,7 @@ inline constexpr unsigned kTestSessionEndedMessage = WM_APP + 1;
 class TestSession final
 {
 public:
-    TestSession(HINSTANCE instance, HWND ownerWindow) noexcept;
+    TestSession(HINSTANCE instance, HWND ownerWindow, ColorGamut gamut) noexcept;
     ~TestSession();
 
     TestSession(const TestSession&) = delete;
@@ -30,8 +32,6 @@ private:
     struct TestWindow
     {
         HWND window{};
-        HFONT overlayFont{};
-        unsigned dpi{96};
         bool primary{};
     };
 
@@ -42,7 +42,6 @@ private:
     static LRESULT __stdcall TestWindowProc(HWND window, unsigned message, WPARAM wParam, LPARAM lParam);
 
     LRESULT HandleTestWindowMessage(HWND window, unsigned message, WPARAM wParam, LPARAM lParam);
-    void PaintWindow(HWND window) const noexcept;
     void ChangeColor(int direction) noexcept;
     void ShowCursorTemporarily() noexcept;
     void RequestClose(bool displayConfigurationChanged) noexcept;
@@ -53,11 +52,12 @@ private:
     bool RescheduleEarlyTimer(HWND window, uintptr_t timerId, uint64_t deadline) const noexcept;
     void HideCursorIfOverTestWindow() const noexcept;
     [[nodiscard]] bool IsTestWindow(HWND window) const noexcept;
-    [[nodiscard]] const TestWindow* FindTestWindow(HWND window) const noexcept;
     [[nodiscard]] HWND CoordinatorWindow() const noexcept;
 
     HINSTANCE instance_{};
     HWND ownerWindow_{};
+    ColorGamut gamut_{ColorGamut::Srgb};
+    std::unique_ptr<TestRenderer> renderer_;
     std::vector<TestWindow> windows_;
     size_t colorIndex_{};
     bool overlayVisible_{};

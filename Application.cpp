@@ -273,7 +273,7 @@ void Application::StartSrgbTest()
         return;
     }
 
-    auto session = std::make_unique<TestSession>(instance_, mainWindow_);
+    auto session = std::make_unique<TestSession>(instance_, mainWindow_, ColorGamut::Srgb);
     ShowWindow(mainWindow_, SW_HIDE);
     if (!session->Start())
     {

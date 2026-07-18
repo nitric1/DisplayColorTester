@@ -10,7 +10,7 @@ DisplayColorTester is a native Win32 C++ utility for showing the same sRGB test 
 - Previous color: Left Arrow or right mouse button
 - Next color: Right Arrow or left mouse button
 - Exit the test: Escape
-- Color-name overlay for one second after each change
+- Color-name and hex-code overlay for one second after each change
 - Mouse cursor hidden after one second without mouse movement
 
 Display-P3, Adobe RGB, BT.2020, ICC/WCS, and Windows Advanced Color output are planned but are not enabled yet.
