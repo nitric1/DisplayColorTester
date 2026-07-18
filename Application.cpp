@@ -16,7 +16,7 @@ std::wstring FormatSystemError(DWORD errorCode)
 {
     if (errorCode == ERROR_SUCCESS)
     {
-        return L"알 수 없는 오류입니다.";
+        return L"An unknown error occurred.";
     }
 
     wchar_t buffer[512]{};
@@ -29,7 +29,7 @@ std::wstring FormatSystemError(DWORD errorCode)
                                         nullptr);
     if (length == 0)
     {
-        return L"오류 코드: " + std::to_wstring(errorCode);
+        return L"Error code: " + std::to_wstring(errorCode);
     }
 
     std::wstring message(buffer, length);
@@ -66,7 +66,7 @@ int Application::Run(int showCommand)
     {
         const std::wstring details = FormatSystemError(GetLastError());
         MessageBoxW(nullptr,
-                    (L"프로그램 창을 만들 수 없습니다.\n\n" + details).c_str(),
+                    (L"Unable to create the application window.\n\n" + details).c_str(),
                     kApplicationTitle,
                     MB_OK | MB_ICONERROR);
         return 1;
@@ -294,7 +294,7 @@ void Application::StartTest(ColorGamut gamut, size_t buttonIndex)
         ShowWindow(mainWindow_, SW_SHOW);
         SetForegroundWindow(mainWindow_);
         MessageBoxW(mainWindow_,
-                    (L"모니터 테스트 창을 만들 수 없습니다.\n\n" + details).c_str(),
+                    (L"Unable to create the monitor test windows.\n\n" + details).c_str(),
                     kApplicationTitle,
                     MB_OK | MB_ICONERROR);
         return;
@@ -319,7 +319,8 @@ void Application::FinishTestSession(bool displayConfigurationChanged)
     if (displayConfigurationChanged)
     {
         MessageBoxW(mainWindow_,
-                    L"디스플레이 구성이 변경되어 테스트를 종료했습니다.\n다시 시작하면 현재 모니터 구성을 사용합니다.",
+                    L"The display configuration changed, so the test was closed.\n"
+                    L"Restart the test to use the current monitor configuration.",
                     kApplicationTitle,
                     MB_OK | MB_ICONINFORMATION);
     }
