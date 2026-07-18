@@ -85,6 +85,12 @@ int Application::Run(int showCommand)
             return 1;
         }
 
+        if (mainWindow_ != nullptr && IsWindowVisible(mainWindow_) &&
+            IsDialogMessageW(mainWindow_, &message))
+        {
+            continue;
+        }
+
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
@@ -137,6 +143,10 @@ bool Application::CreateMainWindow(int showCommand)
     }
 
     ShowWindow(mainWindow_, showCommand);
+    if (buttons_[0] != nullptr && IsWindowVisible(mainWindow_))
+    {
+        SetFocus(buttons_[0]);
+    }
     UpdateWindow(mainWindow_);
     return true;
 }
