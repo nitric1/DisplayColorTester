@@ -37,12 +37,6 @@ void SetLastErrorFromHResult(HRESULT result) noexcept
     }
 }
 
-bool UseDarkText(TestColorId color) noexcept
-{
-    return color == TestColorId::Green || color == TestColorId::Yellow ||
-           color == TestColorId::Cyan || color == TestColorId::White;
-}
-
 bool IsValidChromaticity(Chromaticity value) noexcept
 {
     return std::isfinite(value.x) && std::isfinite(value.y) &&
@@ -251,7 +245,8 @@ bool GetDisplayProfilePath(HMONITOR monitor, std::wstring& profilePath)
 }
 }
 
-ColorManagedRenderer::ColorManagedRenderer(ColorGamut gamut) noexcept : gamut_(gamut)
+ColorManagedRenderer::ColorManagedRenderer(ColorGamut gamut, TestPattern pattern) noexcept
+    : gamut_(gamut), pattern_(pattern)
 {
 }
 
@@ -297,7 +292,7 @@ void ColorManagedRenderer::DetachWindow(HWND window) noexcept
     }
 }
 
-void ColorManagedRenderer::PaintWindow(HWND window, TestColorId color, bool overlayVisible) const noexcept
+void ColorManagedRenderer::PaintWindow(HWND window, size_t patchIndex, bool overlayVisible) const noexcept
 {
     PAINTSTRUCT paint{};
     HDC paintDc = BeginPaint(window, &paint);
@@ -307,13 +302,15 @@ void ColorManagedRenderer::PaintWindow(HWND window, TestColorId color, bool over
     }
 
     const WindowContext* context = FindWindowContext(window);
-    if (context == nullptr)
+    const TestPatchSequence patches = TestPatches(pattern_);
+    if (context == nullptr || patchIndex >= context->colors.size() || patchIndex >= patches.size)
     {
         EndPaint(window, &paint);
         return;
     }
+    const TestPatch& patch = patches[patchIndex];
 
-    const RenderColor& background = context->colors[static_cast<size_t>(color)];
+    const RenderColor& background = context->colors[patchIndex];
     ID3D11RenderTargetView* renderTarget = context->renderTarget.Get();
     d3dContext_->OMSetRenderTargets(1, &renderTarget, nullptr);
     d3dContext_->ClearRenderTargetView(renderTarget, background.data());
@@ -329,10 +326,11 @@ void ColorManagedRenderer::PaintWindow(HWND window, TestColorId color, bool over
                                                    kShadowOffset,
                                                    targetSize.width + kShadowOffset,
                                                    targetSize.height + kShadowOffset);
-        ID2D1SolidColorBrush* textBrush = UseDarkText(color) ? context->darkBrush.Get() : context->lightBrush.Get();
-        ID2D1SolidColorBrush* shadowBrush = UseDarkText(color) ? context->lightBrush.Get() : context->darkBrush.Get();
+        const bool useDarkText = UseDarkOverlayText(patch);
+        ID2D1SolidColorBrush* textBrush = useDarkText ? context->darkBrush.Get() : context->lightBrush.Get();
+        ID2D1SolidColorBrush* shadowBrush = useDarkText ? context->lightBrush.Get() : context->darkBrush.Get();
         wchar_t overlayText[kTestOverlayTextCapacity]{};
-        size_t textLength = FormatTestOverlayText(gamut_, color, overlayText);
+        size_t textLength = FormatTestOverlayText(gamut_, patch, overlayText);
         if (context->diagnosticText[0] != L'\0')
         {
             AppendText(overlayText, textLength, L"\n");
@@ -808,7 +806,7 @@ ColorManagedRenderer::QueryNativeDisplayState(HMONITOR monitor) const noexcept
 }
 
 bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
-                                                std::array<RenderColor, 8>& colors) const
+                                                std::vector<RenderColor>& colors) const
 {
     std::wstring profilePath;
     if (!GetDisplayProfilePath(monitor, profilePath))
@@ -860,11 +858,12 @@ bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
         return false;
     }
 
-    std::array<COLOR, 8> inputColors{};
-    std::array<COLOR, 8> outputColors{};
-    for (size_t index = 0; index < kTestColorSequence.size(); ++index)
+    const TestPatchSequence patches = TestPatches(pattern_);
+    std::vector<COLOR> inputColors(patches.size);
+    std::vector<COLOR> outputColors(patches.size);
+    for (size_t index = 0; index < patches.size; ++index)
     {
-        const RgbColor rgb = TestColorRgb(kTestColorSequence[index]);
+        const RgbColor& rgb = patches[index].encodedRgb;
         inputColors[index].rgb.red = rgb.red > 0.0F ? 0xFFFF : 0;
         inputColors[index].rgb.green = rgb.green > 0.0F ? 0xFFFF : 0;
         inputColors[index].rgb.blue = rgb.blue > 0.0F ? 0xFFFF : 0;
@@ -883,7 +882,8 @@ bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
         return false;
     }
 
-    for (size_t index = 0; index < colors.size(); ++index)
+    colors.resize(outputColors.size());
+    for (size_t index = 0; index < outputColors.size(); ++index)
     {
         colors[index] = {
             static_cast<float>(outputColors[index].rgb.red) / kWordMaximum,
@@ -895,18 +895,19 @@ bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
     return true;
 }
 
-std::array<ColorManagedRenderer::RenderColor, 8>
+std::vector<ColorManagedRenderer::RenderColor>
 ColorManagedRenderer::BuildAdvancedColorValues(const RgbColorSpaceDefinition& colorSpace,
-                                               float referenceWhiteScale) noexcept
+                                               float referenceWhiteScale) const
 {
-    std::array<RenderColor, 8> colors{};
+    const TestPatchSequence patches = TestPatches(pattern_);
+    std::vector<RenderColor> colors(patches.size);
     const Matrix3x3 sourceToScRgb = Multiply(kXyzToLinearSrgb,
                                              BuildLinearRgbToXyz(colorSpace));
     for (size_t index = 0; index < colors.size(); ++index)
     {
         // Every test component is an endpoint (0 or 1), so all supported transfer
         // functions map it to the same linear endpoint before matrix conversion.
-        const RgbColor source = TestColorRgb(kTestColorSequence[index]);
+        const RgbColor source = patches[index].encodedRgb;
         const RgbColor scRgb = Transform(sourceToScRgb, source);
         colors[index] = {
             scRgb.red * referenceWhiteScale,
@@ -918,12 +919,13 @@ ColorManagedRenderer::BuildAdvancedColorValues(const RgbColorSpaceDefinition& co
     return colors;
 }
 
-std::array<ColorManagedRenderer::RenderColor, 8> ColorManagedRenderer::BuildFallbackSdrValues() noexcept
+std::vector<ColorManagedRenderer::RenderColor> ColorManagedRenderer::BuildFallbackSdrValues() const
 {
-    std::array<RenderColor, 8> colors{};
+    const TestPatchSequence patches = TestPatches(pattern_);
+    std::vector<RenderColor> colors(patches.size);
     for (size_t index = 0; index < colors.size(); ++index)
     {
-        const RgbColor rgb = TestColorRgb(kTestColorSequence[index]);
+        const RgbColor rgb = patches[index].encodedRgb;
         colors[index] = {rgb.red, rgb.green, rgb.blue, 1.0F};
     }
     return colors;

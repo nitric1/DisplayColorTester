@@ -118,12 +118,12 @@
 
 ### 3.6 6차 구현: 테스트 패턴 모델과 sRGB Grayscale
 
-상태: 계획됨
+상태: 구현 완료, 수동 출력 검증 대기
 
 기존 Color 동작을 공통 test patch 모델로 일반화하고 sRGB에서 Grayscale 패턴을 먼저 완성한다.
 
 - `TestPattern::Color`와 `TestPattern::Grayscale`을 추가한다.
-- `TestColorId`에 직접 결합된 세션과 렌더러 인터페이스를 RGB 값, 표시 이름과 텍스트 명암 정보를 갖는 공통 test patch 모델로 일반화한다.
+- `TestColorId`에 직접 결합된 세션과 렌더러 인터페이스를 RGB 값과 표시 이름을 갖는 공통 test patch 모델로 일반화하고, 텍스트 명암을 patch 값에서 공통 계산한다.
 - 기존 8개 Color patch와 신규 11개 Grayscale patch를 별도 고정 sequence로 관리한다.
 - Grayscale 순서는 `Gray 0%`, `Gray 10%`, ..., `Gray 100%`로 고정하고 encoded RGB code level을 비율의 의미로 사용한다.
 - `Gray 0%`는 `(0, 0, 0)`인 Black, `Gray 100%`는 `(1, 1, 1)`인 White로 정의한다.

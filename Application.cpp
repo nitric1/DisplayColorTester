@@ -46,7 +46,8 @@ int ScaleForDpi(int value, unsigned dpi) noexcept
 }
 }
 
-Application::Application(HINSTANCE instance) noexcept : instance_(instance)
+Application::Application(HINSTANCE instance) noexcept
+    : instance_(instance), selectedPattern_(TestPattern::Color)
 {
 }
 
@@ -119,7 +120,7 @@ bool Application::RegisterWindowClasses() const noexcept
 bool Application::CreateMainWindow(int showCommand)
 {
     const unsigned dpi = GetDpiForSystem();
-    RECT windowRect{0, 0, ScaleForDpi(520, dpi), ScaleForDpi(380, dpi)};
+    RECT windowRect{0, 0, ScaleForDpi(520, dpi), ScaleForDpi(420, dpi)};
     if (!AdjustWindowRectExForDpi(&windowRect, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi))
     {
         return false;
@@ -143,9 +144,9 @@ bool Application::CreateMainWindow(int showCommand)
     }
 
     ShowWindow(mainWindow_, showCommand);
-    if (buttons_[0] != nullptr && IsWindowVisible(mainWindow_))
+    if (gamutButtons_[0] != nullptr && IsWindowVisible(mainWindow_))
     {
-        SetFocus(buttons_[0]);
+        SetFocus(gamutButtons_[0]);
     }
     UpdateWindow(mainWindow_);
     return true;
@@ -153,43 +154,80 @@ bool Application::CreateMainWindow(int showCommand)
 
 bool Application::CreateButtons()
 {
+    struct PatternDefinition
+    {
+        int id;
+        const wchar_t* text;
+    };
+
+    constexpr std::array<PatternDefinition, 2> patternDefinitions{{
+        {IDC_PATTERN_COLOR, L"Color"},
+        {IDC_PATTERN_GRAYSCALE, L"Grayscale"},
+    }};
+    for (size_t index = 0; index < patternDefinitions.size(); ++index)
+    {
+        const auto& definition = patternDefinitions[index];
+        const DWORD style = WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTORADIOBUTTON |
+                            (index == 0 ? WS_GROUP : 0);
+        patternButtons_[index] = CreateWindowExW(
+            0,
+            L"BUTTON",
+            definition.text,
+            style,
+            0,
+            0,
+            0,
+            0,
+            mainWindow_,
+            reinterpret_cast<HMENU>(static_cast<intptr_t>(definition.id)),
+            instance_,
+            nullptr);
+        if (patternButtons_[index] == nullptr)
+        {
+            return false;
+        }
+    }
+    SendMessageW(patternButtons_[0], BM_SETCHECK, BST_CHECKED, 0);
+
     struct ButtonDefinition
     {
         int id;
         const wchar_t* text;
-        bool enabled;
     };
 
     constexpr std::array<ButtonDefinition, 5> definitions{{
-        {IDC_GAMUT_SRGB, L"sRGB", true},
-        {IDC_GAMUT_DISPLAY_P3, L"Display-P3 (P3-D65)", true},
-        {IDC_GAMUT_ADOBE_RGB, L"Adobe RGB", true},
-        {IDC_GAMUT_BT2020, L"BT.2020", true},
-        {IDC_GAMUT_DISPLAY_NATIVE, L"Display Native RGB (Best effort)", true},
+        {IDC_GAMUT_SRGB, L"sRGB"},
+        {IDC_GAMUT_DISPLAY_P3, L"Display-P3 (P3-D65)"},
+        {IDC_GAMUT_ADOBE_RGB, L"Adobe RGB"},
+        {IDC_GAMUT_BT2020, L"BT.2020"},
+        {IDC_GAMUT_DISPLAY_NATIVE, L"Display Native RGB (Best effort)"},
     }};
 
     for (size_t index = 0; index < definitions.size(); ++index)
     {
         const auto& definition = definitions[index];
-        buttons_[index] = CreateWindowExW(0,
-                                          L"BUTTON",
-                                          definition.text,
-                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-                                          0,
-                                          0,
-                                          0,
-                                          0,
-                                          mainWindow_,
-                                          reinterpret_cast<HMENU>(static_cast<intptr_t>(definition.id)),
-                                          instance_,
-                                          nullptr);
-        if (buttons_[index] == nullptr)
+        const DWORD style = WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON |
+                            (index == 0 ? WS_GROUP : 0);
+        gamutButtons_[index] = CreateWindowExW(
+            0,
+            L"BUTTON",
+            definition.text,
+            style,
+            0,
+            0,
+            0,
+            0,
+            mainWindow_,
+            reinterpret_cast<HMENU>(static_cast<intptr_t>(definition.id)),
+            instance_,
+            nullptr);
+        if (gamutButtons_[index] == nullptr)
         {
             return false;
         }
-        EnableWindow(buttons_[index], definition.enabled ? TRUE : FALSE);
     }
 
+    UpdateGamutButtonStates();
     RecreateMainFont();
     LayoutButtons();
     return true;
@@ -197,7 +235,7 @@ bool Application::CreateButtons()
 
 void Application::LayoutButtons() const noexcept
 {
-    if (mainWindow_ == nullptr || buttons_[0] == nullptr)
+    if (mainWindow_ == nullptr || patternButtons_[0] == nullptr || gamutButtons_[0] == nullptr)
     {
         return;
     }
@@ -207,30 +245,59 @@ void Application::LayoutButtons() const noexcept
     const unsigned dpi = GetDpiForWindow(mainWindow_);
     const int padding = ScaleForDpi(24, dpi);
     const int gap = ScaleForDpi(12, dpi);
+    const int patternHeight = ScaleForDpi(30, dpi);
+    const int patternToGridGap = ScaleForDpi(18, dpi);
     const int buttonHeight = ScaleForDpi(58, dpi);
     const int clientWidth = clientRect.right - clientRect.left;
     const int clientHeight = clientRect.bottom - clientRect.top;
     const int availableWidth = (std::max)(0, clientWidth - (padding * 2) - gap);
     const int buttonWidth = availableWidth / 2;
-    const int rowCount = static_cast<int>((buttons_.size() + 1) / 2);
+    const int rowCount = static_cast<int>((gamutButtons_.size() + 1) / 2);
     const int gridHeight = (buttonHeight * rowCount) + (gap * (rowCount - 1));
-    const int top = (std::max)(padding, (clientHeight - gridHeight) / 2);
+    const int contentHeight = patternHeight + patternToGridGap + gridHeight;
+    const int top = (std::max)(padding, (clientHeight - contentHeight) / 2);
 
-    for (size_t index = 0; index < buttons_.size(); ++index)
+    const int patternWidth = availableWidth / 2;
+    for (size_t index = 0; index < patternButtons_.size(); ++index)
+    {
+        const int left = padding + static_cast<int>(index) * (patternWidth + gap);
+        SetWindowPos(patternButtons_[index],
+                     nullptr,
+                     left,
+                     top,
+                     patternWidth,
+                     patternHeight,
+                     SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+
+    const int gridTop = top + patternHeight + patternToGridGap;
+    for (size_t index = 0; index < gamutButtons_.size(); ++index)
     {
         const int column = static_cast<int>(index % 2);
         const int row = static_cast<int>(index / 2);
-        const bool lastOddButton = index + 1 == buttons_.size() && (buttons_.size() % 2) != 0;
+        const bool lastOddButton = index + 1 == gamutButtons_.size() && (gamutButtons_.size() % 2) != 0;
         const int left = lastOddButton ? padding : padding + column * (buttonWidth + gap);
-        const int y = top + row * (buttonHeight + gap);
+        const int y = gridTop + row * (buttonHeight + gap);
 
-        SetWindowPos(buttons_[index],
+        SetWindowPos(gamutButtons_[index],
                      nullptr,
                      left,
                      y,
                      lastOddButton ? availableWidth + gap : buttonWidth,
                      buttonHeight,
                      SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+}
+
+void Application::UpdateGamutButtonStates() const noexcept
+{
+    const bool colorPattern = selectedPattern_ == TestPattern::Color;
+    for (size_t index = 0; index < gamutButtons_.size(); ++index)
+    {
+        if (gamutButtons_[index] != nullptr)
+        {
+            EnableWindow(gamutButtons_[index], colorPattern || index == 0 ? TRUE : FALSE);
+        }
     }
 }
 
@@ -270,7 +337,14 @@ void Application::RecreateMainFont()
     {
         fontToUse = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
     }
-    for (HWND button : buttons_)
+    for (HWND button : patternButtons_)
+    {
+        if (button != nullptr)
+        {
+            SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(fontToUse), TRUE);
+        }
+    }
+    for (HWND button : gamutButtons_)
     {
         if (button != nullptr)
         {
@@ -286,7 +360,7 @@ void Application::StartTest(ColorGamut gamut, size_t buttonIndex)
         return;
     }
 
-    auto session = std::make_unique<TestSession>(instance_, mainWindow_, gamut);
+    auto session = std::make_unique<TestSession>(instance_, mainWindow_, gamut, selectedPattern_);
     ShowWindow(mainWindow_, SW_HIDE);
     if (!session->Start())
     {
@@ -314,7 +388,7 @@ void Application::FinishTestSession(bool displayConfigurationChanged)
 
     ShowWindow(mainWindow_, SW_SHOW);
     SetForegroundWindow(mainWindow_);
-    SetFocus(buttons_[lastStartedButtonIndex_]);
+    SetFocus(gamutButtons_[lastStartedButtonIndex_]);
 
     if (displayConfigurationChanged)
     {
@@ -343,6 +417,18 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
         return CreateButtons() ? 0 : -1;
 
     case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_PATTERN_COLOR && HIWORD(wParam) == BN_CLICKED)
+        {
+            selectedPattern_ = TestPattern::Color;
+            UpdateGamutButtonStates();
+            return 0;
+        }
+        if (LOWORD(wParam) == IDC_PATTERN_GRAYSCALE && HIWORD(wParam) == BN_CLICKED)
+        {
+            selectedPattern_ = TestPattern::Grayscale;
+            UpdateGamutButtonStates();
+            return 0;
+        }
         if (LOWORD(wParam) == IDC_GAMUT_SRGB && HIWORD(wParam) == BN_CLICKED)
         {
             StartTest(ColorGamut::Srgb, 0);
@@ -394,7 +480,7 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
         auto* minimums = reinterpret_cast<MINMAXINFO*>(lParam);
         const unsigned dpi = GetDpiForWindow(window);
         minimums->ptMinTrackSize.x = ScaleForDpi(420, dpi);
-        minimums->ptMinTrackSize.y = ScaleForDpi(330, dpi);
+        minimums->ptMinTrackSize.y = ScaleForDpi(370, dpi);
         return 0;
     }
 

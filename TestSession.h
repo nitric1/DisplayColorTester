@@ -9,7 +9,10 @@ inline constexpr unsigned kTestSessionEndedMessage = WM_APP + 1;
 class TestSession final
 {
 public:
-    TestSession(HINSTANCE instance, HWND ownerWindow, ColorGamut gamut) noexcept;
+    TestSession(HINSTANCE instance,
+                HWND ownerWindow,
+                ColorGamut gamut,
+                TestPattern pattern) noexcept;
     ~TestSession();
 
     TestSession(const TestSession&) = delete;
@@ -42,7 +45,7 @@ private:
     static LRESULT __stdcall TestWindowProc(HWND window, unsigned message, WPARAM wParam, LPARAM lParam);
 
     LRESULT HandleTestWindowMessage(HWND window, unsigned message, WPARAM wParam, LPARAM lParam);
-    void ChangeColor(int direction) noexcept;
+    void ChangePatch(int direction) noexcept;
     void ShowCursorTemporarily() noexcept;
     void RequestClose(bool displayConfigurationChanged) noexcept;
     void Stop(bool notifyOwner, bool displayConfigurationChanged) noexcept;
@@ -57,9 +60,10 @@ private:
     HINSTANCE instance_{};
     HWND ownerWindow_{};
     ColorGamut gamut_{ColorGamut::Srgb};
+    TestPattern pattern_{TestPattern::Color};
     std::unique_ptr<TestRenderer> renderer_;
     std::vector<TestWindow> windows_;
-    size_t colorIndex_{};
+    size_t patchIndex_{};
     bool overlayVisible_{};
     bool cursorVisible_{true};
     bool stopping_{};

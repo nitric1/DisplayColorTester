@@ -3,6 +3,7 @@
 namespace DisplayColorTester
 {
 enum class ColorGamut;
+enum class TestPattern;
 class TestSession;
 
 class Application final
@@ -23,6 +24,7 @@ private:
     bool CreateMainWindow(int showCommand);
     bool CreateButtons();
     void LayoutButtons() const noexcept;
+    void UpdateGamutButtonStates() const noexcept;
     void RecreateMainFont();
     void StartTest(ColorGamut gamut, size_t buttonIndex);
     void FinishTestSession(bool displayConfigurationChanged);
@@ -31,8 +33,10 @@ private:
 
     HINSTANCE instance_{};
     HWND mainWindow_{};
-    std::array<HWND, 5> buttons_{};
+    std::array<HWND, 2> patternButtons_{};
+    std::array<HWND, 5> gamutButtons_{};
     HFONT mainFont_{};
+    TestPattern selectedPattern_;
     size_t lastStartedButtonIndex_{};
     std::unique_ptr<TestSession> testSession_;
 };

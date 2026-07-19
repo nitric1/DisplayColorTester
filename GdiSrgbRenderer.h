@@ -7,12 +7,12 @@ namespace DisplayColorTester
 class GdiSrgbRenderer final : public TestRenderer
 {
 public:
-    GdiSrgbRenderer() = default;
+    explicit GdiSrgbRenderer(TestPattern pattern) noexcept;
     ~GdiSrgbRenderer() override;
 
     bool AttachWindow(HWND window) noexcept override;
     void DetachWindow(HWND window) noexcept override;
-    void PaintWindow(HWND window, TestColorId color, bool overlayVisible) const noexcept override;
+    void PaintWindow(HWND window, size_t patchIndex, bool overlayVisible) const noexcept override;
 
 private:
     struct WindowContext
@@ -24,6 +24,7 @@ private:
 
     [[nodiscard]] const WindowContext* FindWindowContext(HWND window) const noexcept;
 
+    TestPattern pattern_;
     std::vector<WindowContext> windowContexts_;
 };
 }

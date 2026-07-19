@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace DisplayColorTester
 {
@@ -11,16 +11,10 @@ enum class ColorGamut
     DisplayNative,
 };
 
-enum class TestColorId
+enum class TestPattern
 {
-    Red,
-    Green,
-    Blue,
-    Yellow,
-    Magenta,
-    Cyan,
-    White,
-    Black,
+    Color,
+    Grayscale,
 };
 
 enum class ColorTransferFunction
@@ -51,6 +45,23 @@ struct RgbColor
     float red;
     float green;
     float blue;
+};
+
+struct TestPatch
+{
+    RgbColor encodedRgb;
+    const wchar_t* name;
+};
+
+struct TestPatchSequence
+{
+    const TestPatch* patches;
+    size_t size;
+
+    [[nodiscard]] constexpr const TestPatch& operator[](size_t index) const noexcept
+    {
+        return patches[index];
+    }
 };
 
 inline constexpr RgbColorSpaceDefinition kSrgbColorSpace{
@@ -127,38 +138,85 @@ inline constexpr RgbColorSpaceDefinition kBt2020ColorSpace{
     return L"Unknown";
 }
 
-inline constexpr std::array<TestColorId, 8> kTestColorSequence{{
-    TestColorId::Red,
-    TestColorId::Green,
-    TestColorId::Blue,
-    TestColorId::Yellow,
-    TestColorId::Magenta,
-    TestColorId::Cyan,
-    TestColorId::White,
-    TestColorId::Black,
+[[nodiscard]] constexpr const wchar_t* TestPatternName(TestPattern pattern) noexcept
+{
+    switch (pattern)
+    {
+    case TestPattern::Color:
+        return L"Color";
+    case TestPattern::Grayscale:
+        return L"Grayscale";
+    }
+
+    return L"Unknown";
+}
+
+inline constexpr std::array<TestPatch, 8> kColorTestPatches{{
+    {{1.0F, 0.0F, 0.0F}, L"Red (#F00)"},
+    {{0.0F, 1.0F, 0.0F}, L"Green (#0F0)"},
+    {{0.0F, 0.0F, 1.0F}, L"Blue (#00F)"},
+    {{1.0F, 1.0F, 0.0F}, L"Yellow (#FF0)"},
+    {{1.0F, 0.0F, 1.0F}, L"Magenta (#F0F)"},
+    {{0.0F, 1.0F, 1.0F}, L"Cyan (#0FF)"},
+    {{1.0F, 1.0F, 1.0F}, L"White (#FFF)"},
+    {{0.0F, 0.0F, 0.0F}, L"Black (#000)"},
 }};
 
-inline constexpr std::array<const wchar_t*, 8> kTestColorNames{{
-    L"Red (#F00)",
-    L"Green (#0F0)",
-    L"Blue (#00F)",
-    L"Yellow (#FF0)",
-    L"Magenta (#F0F)",
-    L"Cyan (#0FF)",
-    L"White (#FFF)",
-    L"Black (#000)",
+inline constexpr std::array<TestPatch, 11> kGrayscaleTestPatches{{
+    {{0.0F, 0.0F, 0.0F}, L"Gray 0%"},
+    {{0.1F, 0.1F, 0.1F}, L"Gray 10%"},
+    {{0.2F, 0.2F, 0.2F}, L"Gray 20%"},
+    {{0.3F, 0.3F, 0.3F}, L"Gray 30%"},
+    {{0.4F, 0.4F, 0.4F}, L"Gray 40%"},
+    {{0.5F, 0.5F, 0.5F}, L"Gray 50%"},
+    {{0.6F, 0.6F, 0.6F}, L"Gray 60%"},
+    {{0.7F, 0.7F, 0.7F}, L"Gray 70%"},
+    {{0.8F, 0.8F, 0.8F}, L"Gray 80%"},
+    {{0.9F, 0.9F, 0.9F}, L"Gray 90%"},
+    {{1.0F, 1.0F, 1.0F}, L"Gray 100%"},
+}};
+
+inline constexpr std::array<unsigned, 11> kExpectedSrgbGrayCodes{{
+    0U, 26U, 51U, 77U, 102U, 128U, 153U, 179U, 204U, 230U, 255U,
 }};
 
 inline constexpr size_t kTestOverlayTextCapacity = 384;
 
-[[nodiscard]] constexpr const wchar_t* TestColorName(TestColorId color) noexcept
+[[nodiscard]] constexpr TestPatchSequence TestPatches(TestPattern pattern) noexcept
 {
-    return kTestColorNames[static_cast<size_t>(color)];
+    switch (pattern)
+    {
+    case TestPattern::Color:
+        return {kColorTestPatches.data(), kColorTestPatches.size()};
+    case TestPattern::Grayscale:
+        return {kGrayscaleTestPatches.data(), kGrayscaleTestPatches.size()};
+    }
+
+    return {};
+}
+
+[[nodiscard]] constexpr unsigned SrgbByteValue(float value) noexcept
+{
+    if (value <= 0.0F)
+    {
+        return 0U;
+    }
+    if (value >= 1.0F)
+    {
+        return 255U;
+    }
+    return static_cast<unsigned>(value * 255.0F + 0.5F);
+}
+
+[[nodiscard]] constexpr bool UseDarkOverlayText(const TestPatch& patch) noexcept
+{
+    const RgbColor& rgb = patch.encodedRgb;
+    return 0.299F * rgb.red + 0.587F * rgb.green + 0.114F * rgb.blue >= 0.5F;
 }
 
 template <size_t Capacity>
 size_t FormatTestOverlayText(ColorGamut gamut,
-                             TestColorId color,
+                             const TestPatch& patch,
                              wchar_t (&buffer)[Capacity]) noexcept
 {
     static_assert(Capacity > 0);
@@ -172,33 +230,27 @@ size_t FormatTestOverlayText(ColorGamut gamut,
 
     append(ColorGamutName(gamut));
     append(L" - ");
-    append(TestColorName(color));
+    append(patch.name);
     buffer[length] = L'\0';
     return length;
 }
 
-[[nodiscard]] constexpr RgbColor TestColorRgb(TestColorId color) noexcept
+[[nodiscard]] constexpr bool ValidateSrgbGrayCodes() noexcept
 {
-    switch (color)
+    for (size_t index = 0; index < kGrayscaleTestPatches.size(); ++index)
     {
-    case TestColorId::Red:
-        return {1.0F, 0.0F, 0.0F};
-    case TestColorId::Green:
-        return {0.0F, 1.0F, 0.0F};
-    case TestColorId::Blue:
-        return {0.0F, 0.0F, 1.0F};
-    case TestColorId::Yellow:
-        return {1.0F, 1.0F, 0.0F};
-    case TestColorId::Magenta:
-        return {1.0F, 0.0F, 1.0F};
-    case TestColorId::Cyan:
-        return {0.0F, 1.0F, 1.0F};
-    case TestColorId::White:
-        return {1.0F, 1.0F, 1.0F};
-    case TestColorId::Black:
-        return {0.0F, 0.0F, 0.0F};
+        const RgbColor& rgb = kGrayscaleTestPatches[index].encodedRgb;
+        if (SrgbByteValue(rgb.red) != kExpectedSrgbGrayCodes[index] ||
+            SrgbByteValue(rgb.green) != kExpectedSrgbGrayCodes[index] ||
+            SrgbByteValue(rgb.blue) != kExpectedSrgbGrayCodes[index])
+        {
+            return false;
+        }
     }
-
-    return {};
+    return true;
 }
+
+static_assert(kColorTestPatches.size() == 8);
+static_assert(kGrayscaleTestPatches.size() == 11);
+static_assert(ValidateSrgbGrayCodes());
 }

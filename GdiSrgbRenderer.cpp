@@ -6,17 +6,6 @@ namespace DisplayColorTester
 {
 namespace
 {
-inline constexpr std::array<COLORREF, 8> kSrgbColors{{
-    RGB(255, 0, 0),
-    RGB(0, 255, 0),
-    RGB(0, 0, 255),
-    RGB(255, 255, 0),
-    RGB(255, 0, 255),
-    RGB(0, 255, 255),
-    RGB(255, 255, 255),
-    RGB(0, 0, 0),
-}};
-
 int ScaleForDpi(int value, unsigned dpi) noexcept
 {
     return MulDiv(value, static_cast<int>(dpi), USER_DEFAULT_SCREEN_DPI);
@@ -40,16 +29,17 @@ HFONT CreateOverlayFont(unsigned dpi) noexcept
                        L"Segoe UI");
 }
 
-COLORREF SrgbColor(TestColorId color) noexcept
+COLORREF SrgbColor(const TestPatch& patch) noexcept
 {
-    return kSrgbColors[static_cast<size_t>(color)];
+    const RgbColor& rgb = patch.encodedRgb;
+    return RGB(SrgbByteValue(rgb.red),
+               SrgbByteValue(rgb.green),
+               SrgbByteValue(rgb.blue));
+}
 }
 
-bool UseDarkText(COLORREF color) noexcept
+GdiSrgbRenderer::GdiSrgbRenderer(TestPattern pattern) noexcept : pattern_(pattern)
 {
-    const unsigned luminance = 299U * GetRValue(color) + 587U * GetGValue(color) + 114U * GetBValue(color);
-    return luminance >= 128000U;
-}
 }
 
 GdiSrgbRenderer::~GdiSrgbRenderer()
@@ -108,7 +98,7 @@ void GdiSrgbRenderer::DetachWindow(HWND window) noexcept
     windowContexts_.erase(result);
 }
 
-void GdiSrgbRenderer::PaintWindow(HWND window, TestColorId color, bool overlayVisible) const noexcept
+void GdiSrgbRenderer::PaintWindow(HWND window, size_t patchIndex, bool overlayVisible) const noexcept
 {
     PAINTSTRUCT paint{};
     HDC dc = BeginPaint(window, &paint);
@@ -117,9 +107,17 @@ void GdiSrgbRenderer::PaintWindow(HWND window, TestColorId color, bool overlayVi
         return;
     }
 
+    const TestPatchSequence patches = TestPatches(pattern_);
+    if (patchIndex >= patches.size)
+    {
+        EndPaint(window, &paint);
+        return;
+    }
+    const TestPatch& patch = patches[patchIndex];
+
     RECT clientRect{};
     GetClientRect(window, &clientRect);
-    const COLORREF backgroundColor = SrgbColor(color);
+    const COLORREF backgroundColor = SrgbColor(patch);
     SetDCBrushColor(dc, backgroundColor);
     FillRect(dc, &clientRect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 
@@ -134,14 +132,14 @@ void GdiSrgbRenderer::PaintWindow(HWND window, TestColorId color, bool overlayVi
         const HGDIOBJ previousFont = SelectObject(dc, font);
         SetBkMode(dc, TRANSPARENT);
 
-        const bool darkText = UseDarkText(backgroundColor);
+        const bool darkText = UseDarkOverlayText(patch);
         const COLORREF textColor = darkText ? RGB(0, 0, 0) : RGB(255, 255, 255);
         const COLORREF shadowColor = darkText ? RGB(255, 255, 255) : RGB(0, 0, 0);
         const unsigned dpi = context != nullptr ? context->dpi : USER_DEFAULT_SCREEN_DPI;
         const int shadowOffset = (std::max)(1, ScaleForDpi(2, dpi));
         constexpr unsigned textFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
         wchar_t overlayText[kTestOverlayTextCapacity]{};
-        FormatTestOverlayText(ColorGamut::Srgb, color, overlayText);
+        FormatTestOverlayText(ColorGamut::Srgb, patch, overlayText);
 
         RECT shadowRect = clientRect;
         OffsetRect(&shadowRect, shadowOffset, shadowOffset);

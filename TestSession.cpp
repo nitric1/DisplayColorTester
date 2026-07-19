@@ -14,8 +14,11 @@ constexpr uintptr_t kCursorTimerId = 2;
 constexpr unsigned kTransientDisplayMilliseconds = 1000;
 }
 
-TestSession::TestSession(HINSTANCE instance, HWND ownerWindow, ColorGamut gamut) noexcept
-    : instance_(instance), ownerWindow_(ownerWindow), gamut_(gamut)
+TestSession::TestSession(HINSTANCE instance,
+                         HWND ownerWindow,
+                         ColorGamut gamut,
+                         TestPattern pattern) noexcept
+    : instance_(instance), ownerWindow_(ownerWindow), gamut_(gamut), pattern_(pattern)
 {
 }
 
@@ -43,7 +46,7 @@ bool TestSession::Start()
 {
     try
     {
-        renderer_ = CreateTestRenderer(gamut_);
+        renderer_ = CreateTestRenderer(gamut_, pattern_);
     }
     catch (const std::bad_alloc&)
     {
@@ -89,7 +92,8 @@ bool TestSession::Start()
     std::wstring windowTitle;
     try
     {
-        windowTitle = std::wstring(L"DisplayColorTester - ") + ColorGamutName(gamut_);
+        windowTitle = std::wstring(L"DisplayColorTester - ") +
+                      ColorGamutName(gamut_) + L" - " + TestPatternName(pattern_);
     }
     catch (const std::bad_alloc&)
     {
@@ -242,7 +246,7 @@ LRESULT TestSession::HandleTestWindowMessage(HWND window, unsigned message, WPAR
     case WM_PAINT:
         if (renderer_ != nullptr)
         {
-            renderer_->PaintWindow(window, kTestColorSequence[colorIndex_], overlayVisible_);
+            renderer_->PaintWindow(window, patchIndex_, overlayVisible_);
         }
         return 0;
 
@@ -252,12 +256,12 @@ LRESULT TestSession::HandleTestWindowMessage(HWND window, unsigned message, WPAR
     case WM_KEYDOWN:
         if (wParam == VK_RIGHT)
         {
-            ChangeColor(1);
+            ChangePatch(1);
             return 0;
         }
         if (wParam == VK_LEFT)
         {
-            ChangeColor(-1);
+            ChangePatch(-1);
             return 0;
         }
         if (wParam == VK_ESCAPE)
@@ -269,12 +273,12 @@ LRESULT TestSession::HandleTestWindowMessage(HWND window, unsigned message, WPAR
 
     case WM_LBUTTONDOWN:
         SetFocus(window);
-        ChangeColor(1);
+        ChangePatch(1);
         return 0;
 
     case WM_RBUTTONDOWN:
         SetFocus(window);
-        ChangeColor(-1);
+        ChangePatch(-1);
         return 0;
 
     case WM_CONTEXTMENU:
@@ -340,20 +344,26 @@ LRESULT TestSession::HandleTestWindowMessage(HWND window, unsigned message, WPAR
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
-void TestSession::ChangeColor(int direction) noexcept
+void TestSession::ChangePatch(int direction) noexcept
 {
     if (stopping_)
     {
         return;
     }
 
+    const TestPatchSequence patches = TestPatches(pattern_);
+    if (patches.size == 0)
+    {
+        return;
+    }
+
     if (direction > 0)
     {
-        colorIndex_ = (colorIndex_ + 1) % kTestColorSequence.size();
+        patchIndex_ = (patchIndex_ + 1) % patches.size;
     }
     else
     {
-        colorIndex_ = (colorIndex_ + kTestColorSequence.size() - 1) % kTestColorSequence.size();
+        patchIndex_ = (patchIndex_ + patches.size - 1) % patches.size;
     }
 
     overlayVisible_ = RestartTimer(kOverlayTimerId);

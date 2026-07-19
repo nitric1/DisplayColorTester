@@ -7,12 +7,12 @@ namespace DisplayColorTester
 class ColorManagedRenderer final : public TestRenderer
 {
 public:
-    explicit ColorManagedRenderer(ColorGamut gamut) noexcept;
+    ColorManagedRenderer(ColorGamut gamut, TestPattern pattern) noexcept;
     ~ColorManagedRenderer() override = default;
 
     bool AttachWindow(HWND window) noexcept override;
     void DetachWindow(HWND window) noexcept override;
-    void PaintWindow(HWND window, TestColorId color, bool overlayVisible) const noexcept override;
+    void PaintWindow(HWND window, size_t patchIndex, bool overlayVisible) const noexcept override;
 
 private:
     using RenderColor = std::array<float, 4>;
@@ -43,7 +43,7 @@ private:
     {
         HWND window{};
         OutputMode outputMode{OutputMode::LegacySdr};
-        std::array<RenderColor, 8> colors{};
+        std::vector<RenderColor> colors;
         Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain;
         Microsoft::WRL::ComPtr<ID3D11RenderTargetView> renderTarget;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> d2dContext;
@@ -63,11 +63,11 @@ private:
     [[nodiscard]] AdvancedColorState QueryAdvancedColorState(HMONITOR monitor) const;
     [[nodiscard]] NativeDisplayState QueryNativeDisplayState(HMONITOR monitor) const noexcept;
     [[nodiscard]] bool BuildLegacySdrColors(HMONITOR monitor,
-                                            std::array<RenderColor, 8>& colors) const;
-    [[nodiscard]] static std::array<RenderColor, 8> BuildAdvancedColorValues(
+                                            std::vector<RenderColor>& colors) const;
+    [[nodiscard]] std::vector<RenderColor> BuildAdvancedColorValues(
         const RgbColorSpaceDefinition& colorSpace,
-        float referenceWhiteScale) noexcept;
-    [[nodiscard]] static std::array<RenderColor, 8> BuildFallbackSdrValues() noexcept;
+        float referenceWhiteScale) const;
+    [[nodiscard]] std::vector<RenderColor> BuildFallbackSdrValues() const;
     [[nodiscard]] const WindowContext* FindWindowContext(HWND window) const noexcept;
 
     Microsoft::WRL::ComPtr<ID3D11Device> d3dDevice_;
@@ -78,6 +78,7 @@ private:
     Microsoft::WRL::ComPtr<IDWriteFactory> dwriteFactory_;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> textFormat_;
     ColorGamut gamut_;
+    TestPattern pattern_;
     std::vector<WindowContext> windowContexts_;
 };
 }
