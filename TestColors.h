@@ -119,6 +119,61 @@ inline constexpr RgbColorSpaceDefinition kBt2020ColorSpace{
     return kSrgbColorSpace;
 }
 
+[[nodiscard]] inline float DecodeColorChannel(
+    float encodedValue,
+    const RgbColorSpaceDefinition& definition) noexcept
+{
+    if (encodedValue <= 0.0F)
+    {
+        return 0.0F;
+    }
+    if (encodedValue >= 1.0F)
+    {
+        return 1.0F;
+    }
+
+    const double encoded = encodedValue;
+    switch (definition.transferFunction)
+    {
+    case ColorTransferFunction::Srgb:
+        if (encoded <= 0.04045)
+        {
+            return static_cast<float>(encoded / 12.92);
+        }
+        return static_cast<float>(std::pow((encoded + 0.055) / 1.055, 2.4));
+
+    case ColorTransferFunction::Power:
+        return static_cast<float>(std::pow(encoded, definition.calibratedGamma));
+
+    case ColorTransferFunction::Bt2020:
+    {
+        constexpr double alpha = 1.09929682680944;
+        constexpr double beta = 0.018053968510807;
+        constexpr double linearScale = 4.5;
+        constexpr double exponent = 0.45;
+        if (encoded < linearScale * beta)
+        {
+            return static_cast<float>(encoded / linearScale);
+        }
+        return static_cast<float>(
+            std::pow((encoded + alpha - 1.0) / alpha, 1.0 / exponent));
+    }
+    }
+
+    return encodedValue;
+}
+
+[[nodiscard]] inline RgbColor DecodeColor(
+    RgbColor encoded,
+    const RgbColorSpaceDefinition& definition) noexcept
+{
+    return {
+        DecodeColorChannel(encoded.red, definition),
+        DecodeColorChannel(encoded.green, definition),
+        DecodeColorChannel(encoded.blue, definition),
+    };
+}
+
 [[nodiscard]] constexpr const wchar_t* ColorGamutName(ColorGamut gamut) noexcept
 {
     switch (gamut)

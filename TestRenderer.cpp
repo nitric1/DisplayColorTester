@@ -9,7 +9,7 @@ namespace DisplayColorTester
 {
 std::unique_ptr<TestRenderer> CreateTestRenderer(ColorGamut gamut, TestPattern pattern)
 {
-    if (pattern == TestPattern::Grayscale && gamut != ColorGamut::Srgb)
+    if (pattern == TestPattern::Grayscale && gamut == ColorGamut::DisplayNative)
     {
         return nullptr;
     }

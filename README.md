@@ -5,10 +5,10 @@ DisplayColorTester is a native Win32 C++ utility that shows the same selected-ga
 ## Features
 
 - Five test modes: sRGB, Display-P3 (P3-D65), Adobe RGB, BT.2020, and Display Native RGB (Best effort)
-- Color and Grayscale test patterns; Grayscale is currently available for sRGB
+- Color and Grayscale test patterns; Grayscale is available for the four standard color modes
 - One borderless, topmost, windowed-fullscreen window per active monitor
 - Per-monitor rendering paths for mixed legacy SDR, Advanced Color SDR, and HDR configurations
-- Keyboard and mouse color navigation
+- Keyboard and mouse test-patch navigation
 - Automatic test-session shutdown when the display configuration changes
 
 ## Color modes
@@ -25,13 +25,13 @@ The eight test colors are shown in this order:
 
 Red, Green, Blue, Yellow, Magenta, Cyan, White, Black
 
-The sRGB Grayscale pattern shows Gray 0% through Gray 100% in 10% steps.
+The Grayscale pattern shows Gray 0% through Gray 100% in 10% encoded code-value steps.
 
 ## Usage
 
 1. Launch `DisplayColorTester.exe`.
 2. Select a color mode.
-3. Select the Color or Grayscale test pattern. Only sRGB is available for Grayscale in the current version.
+3. Select the Color or Grayscale test pattern. Display Native RGB remains unavailable for Grayscale.
 4. The main window is hidden and a test window opens on every active monitor.
 5. Use the following controls during the test:
 

@@ -296,7 +296,8 @@ void Application::UpdateGamutButtonStates() const noexcept
     {
         if (gamutButtons_[index] != nullptr)
         {
-            EnableWindow(gamutButtons_[index], colorPattern || index == 0 ? TRUE : FALSE);
+            const bool displayNative = index + 1 == gamutButtons_.size();
+            EnableWindow(gamutButtons_[index], (colorPattern || !displayNative) ? TRUE : FALSE);
         }
     }
 }

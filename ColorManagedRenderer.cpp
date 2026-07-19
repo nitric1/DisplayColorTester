@@ -100,6 +100,19 @@ DWORD ToCalibratedGamma(float gamma) noexcept
     return static_cast<DWORD>(fixed8Dot8 << 8);
 }
 
+unsigned ToColorWord(float value) noexcept
+{
+    if (value <= 0.0F)
+    {
+        return 0U;
+    }
+    if (value >= 1.0F)
+    {
+        return 0xFFFFU;
+    }
+    return static_cast<unsigned>(value * kWordMaximum + 0.5F);
+}
+
 void SetXyz(CIEXYZ& destination, double x, double y, double z) noexcept
 {
     destination.ciexyzX = ToFixed2Dot30(x);
@@ -847,7 +860,7 @@ bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
            sourceToXyz.values[0][2],
            sourceToXyz.values[1][2],
            sourceToXyz.values[2][2]);
-    source.lcsGammaRed = ToCalibratedGamma(definition.calibratedGamma);
+    source.lcsGammaRed = ToCalibratedGamma(1.0F);
     source.lcsGammaGreen = source.lcsGammaRed;
     source.lcsGammaBlue = source.lcsGammaRed;
 
@@ -863,10 +876,10 @@ bool ColorManagedRenderer::BuildLegacySdrColors(HMONITOR monitor,
     std::vector<COLOR> outputColors(patches.size);
     for (size_t index = 0; index < patches.size; ++index)
     {
-        const RgbColor& rgb = patches[index].encodedRgb;
-        inputColors[index].rgb.red = rgb.red > 0.0F ? 0xFFFF : 0;
-        inputColors[index].rgb.green = rgb.green > 0.0F ? 0xFFFF : 0;
-        inputColors[index].rgb.blue = rgb.blue > 0.0F ? 0xFFFF : 0;
+        const RgbColor linear = DecodeColor(patches[index].encodedRgb, definition);
+        inputColors[index].rgb.red = ToColorWord(linear.red);
+        inputColors[index].rgb.green = ToColorWord(linear.green);
+        inputColors[index].rgb.blue = ToColorWord(linear.blue);
     }
 
     const BOOL translated = TranslateColors(transform,
@@ -905,10 +918,8 @@ ColorManagedRenderer::BuildAdvancedColorValues(const RgbColorSpaceDefinition& co
                                              BuildLinearRgbToXyz(colorSpace));
     for (size_t index = 0; index < colors.size(); ++index)
     {
-        // Every test component is an endpoint (0 or 1), so all supported transfer
-        // functions map it to the same linear endpoint before matrix conversion.
-        const RgbColor source = patches[index].encodedRgb;
-        const RgbColor scRgb = Transform(sourceToScRgb, source);
+        const RgbColor linear = DecodeColor(patches[index].encodedRgb, colorSpace);
+        const RgbColor scRgb = Transform(sourceToScRgb, linear);
         colors[index] = {
             scRgb.red * referenceWhiteScale,
             scRgb.green * referenceWhiteScale,
