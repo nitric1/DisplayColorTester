@@ -10,14 +10,15 @@
 
 최종 프로그램은 다음 동작을 제공한다.
 
-- 시작 시 색역 선택용 메인 창을 표시한다.
-- 메인 창에는 `sRGB`, `Display-P3 (P3-D65)`, `Adobe RGB`, `BT.2020` 버튼을 표시한다.
+- 시작 시 테스트 패턴과 색역 선택용 메인 창을 표시한다.
+- 메인 창에는 `Color`, `Grayscale` 패턴 선택 항목과 `sRGB`, `Display-P3 (P3-D65)`, `Adobe RGB`, `BT.2020`, `Display Native RGB (Best effort)` 버튼을 표시한다.
 - 색역 버튼을 누르면 활성화된 모든 모니터에 각각 하나의 borderless windowed-fullscreen 테스트 창을 표시한다.
-- 모든 테스트 창은 같은 색상을 동시에 표시한다.
-- 색상 순서는 `#F00`, `#0F0`, `#00F`, `#FF0`, `#F0F`, `#0FF`, `#FFF`, `#000`이다.
-- 오른쪽 화살표 또는 마우스 왼쪽 버튼으로 다음 색상으로 이동한다.
-- 왼쪽 화살표 또는 마우스 오른쪽 버튼으로 이전 색상으로 이동한다.
-- 색상이 바뀔 때 각 화면 중앙에 `sRGB - Red (#F00)` 형식으로 현재 색역, 색상 이름과 코드를 1초간 표시한다.
+- 모든 테스트 창은 같은 테스트 patch를 동시에 표시한다.
+- Color 패턴의 순서는 `#F00`, `#0F0`, `#00F`, `#FF0`, `#F0F`, `#0FF`, `#FFF`, `#000`이다.
+- Grayscale 패턴의 순서는 Gray 0%부터 Gray 100%까지 10% 간격의 11단계이다.
+- 오른쪽 화살표 또는 마우스 왼쪽 버튼으로 다음 patch로 이동한다.
+- 왼쪽 화살표 또는 마우스 오른쪽 버튼으로 이전 patch로 이동한다.
+- patch가 바뀔 때 각 화면 중앙에 `sRGB - Red (#F00)` 또는 `sRGB - Gray 30%` 형식으로 현재 색역과 patch 이름을 1초간 표시한다.
 - 테스트 창이 열린 직후와 마우스를 움직일 때만 커서를 표시하고, 마지막 움직임 1초 후에는 테스트 창 위의 커서를 숨긴다.
 - `Esc`를 누르면 모든 테스트 창을 닫고 메인 창으로 돌아간다.
 
@@ -114,6 +115,65 @@
 - 보고된 원색 좌표가 유효하지 않으면 HDR은 BT.2020, SDR은 sRGB를 추정값으로 사용하고 오버레이에 이를 명시한다.
 - legacy SDR에서는 ICC/WCS 변환을 적용하지 않고 8-bit full-range device RGB 끝값을 직접 출력한다.
 - 각 모니터의 오버레이에 Advanced Color HDR/SDR 또는 legacy SDR 경로, bit depth, 보고된 원색/백색점 또는 추정 상태를 표시한다.
+
+### 3.6 6차 구현: 테스트 패턴 모델과 sRGB Grayscale
+
+상태: 계획됨
+
+기존 Color 동작을 공통 test patch 모델로 일반화하고 sRGB에서 Grayscale 패턴을 먼저 완성한다.
+
+- `TestPattern::Color`와 `TestPattern::Grayscale`을 추가한다.
+- `TestColorId`에 직접 결합된 세션과 렌더러 인터페이스를 RGB 값, 표시 이름과 텍스트 명암 정보를 갖는 공통 test patch 모델로 일반화한다.
+- 기존 8개 Color patch와 신규 11개 Grayscale patch를 별도 고정 sequence로 관리한다.
+- Grayscale 순서는 `Gray 0%`, `Gray 10%`, ..., `Gray 100%`로 고정하고 encoded RGB code level을 비율의 의미로 사용한다.
+- `Gray 0%`는 `(0, 0, 0)`인 Black, `Gray 100%`는 `(1, 1, 1)`인 White로 정의한다.
+- sRGB GDI의 8-bit code value는 반올림하여 `0`, `26`, `51`, `77`, `102`, `128`, `153`, `179`, `204`, `230`, `255`를 사용한다.
+- 메인 창에 `Color`와 `Grayscale` 자동 radio button group을 추가하고 기본값은 `Color`로 한다.
+- 패턴 선택 컨트롤을 Tab 탐색 순서에 포함하고 다섯 색역 버튼과 겹치지 않도록 기본 크기, 최소 크기와 DPI별 layout을 조정한다.
+- Color 패턴에서는 기존 다섯 색역을 모두 사용할 수 있게 유지하고, 6차의 Grayscale 패턴에서는 sRGB만 활성화한다.
+- `Application::StartTest`, `TestSession`과 렌더러 factory에 선택한 패턴을 전달하고 세션이 공통 patch index를 관리하게 한다.
+- 테스트 창 제목에 선택 패턴을 포함하고 세션 종료 후 기존 색역 버튼과 패턴 선택 상태 및 포커스를 복구한다.
+- 렌더러의 모니터별 사전 계산 배열과 index 처리에서 8개 고정 가정을 제거한다.
+- sRGB Grayscale 오버레이는 `sRGB - Gray 30%` 형식으로 표시한다.
+- 좌우 화살표, 좌우 마우스 버튼, 순환 이동, 오버레이, 커서 숨김과 `Esc` 종료 동작은 기존 Color 패턴과 동일하게 유지한다.
+
+### 3.7 7차 구현: 표준 광색역 Grayscale 색상 관리
+
+상태: 계획됨
+
+Display-P3, Adobe RGB와 BT.2020에 중간 Grayscale 값을 정확히 처리하는 전달 함수 및 색상 관리 경로를 추가한다.
+
+현재 Color 패턴은 모든 RGB 성분이 `0` 또는 `1`이므로 전달 함수의 양 끝점이 동일하지만, 중간 Grayscale 값에는 이 가정을 사용할 수 없다.
+
+- Grayscale 선택 시 Display-P3, Adobe RGB와 BT.2020 버튼을 활성화한다.
+- 이 단계까지 `Display Native RGB (Best effort)`의 Grayscale은 비활성화하여 정의되지 않은 native 중간값을 출력하지 않는다.
+- encoded channel 값을 linear-light 값으로 변환하는 공통 함수를 추가한다.
+- sRGB와 Display-P3에는 sRGB piecewise inverse transfer function을 적용한다.
+- Adobe RGB에는 `2.19921875` power gamma를 적용한다.
+- BT.2020에는 BT.2020 inverse OETF를 적용한다.
+- Advanced Color에서는 선형화한 RGB를 기존 색역별 RGB-to-scRGB 행렬로 변환하고 SDR white scale을 적용한다.
+- 모든 표준 색역이 D65 white를 사용하므로 equal-channel gray가 scRGB에서도 neutral gray가 되는지 수치 검증한다.
+- legacy SDR에서는 encoded RGB를 먼저 선형화하고 WCS source `LOGCOLORSPACE`를 gamma `1.0`인 calibrated linear RGB로 구성한다.
+- 선형화한 16-bit RGB를 현재 모니터 ICC 프로필로 변환하여 device RGB를 얻는다.
+- 이 방식으로 단일 power gamma만 표현하는 `LOGCOLORSPACE`의 한계를 우회하고 sRGB와 BT.2020의 piecewise 전달 함수를 보존한다.
+- 프로필을 읽거나 변환할 수 없으면 기존 fallback 경로를 사용하되 결과가 color-managed 출력이 아님을 기존 정책대로 취급한다.
+- `0`과 `1` endpoint 및 기존 8개 Color patch의 출력 결과가 변경되지 않도록 회귀 검증한다.
+
+### 3.8 8차 구현: Display Native RGB Grayscale와 전체 검증
+
+상태: 계획됨
+
+Display Native RGB에 Grayscale을 추가하고 다섯 색역의 두 패턴 조합을 최종 통합 검증한다.
+
+- Grayscale 선택 시 `Display Native RGB (Best effort)` 버튼을 활성화한다.
+- legacy SDR에서는 각 단계의 동일한 full-range device RGB code value를 세 채널에 직접 출력한다.
+- Advanced Color에서는 DXGI가 native transfer curve를 제공하지 않으므로 보고된 원색과 백색점을 사용하는 equal-channel linear-light ramp로 출력한다.
+- HDR에서는 기존 native full-frame white scale을 ramp의 100% 기준으로 사용한다.
+- Native Advanced Color의 중간 단계는 물리 장치 code value를 직접 재현한다는 의미가 아니며 `Best effort` 진단 모드라는 한계를 유지한다.
+- 원색 또는 휘도 정보가 유효하지 않으면 기존 BT.2020/sRGB 및 SDR white fallback 정책을 적용한다.
+- Native 진단 오버레이와 `Gray N%`가 함께 읽기 쉽게 표시되도록 한다.
+- 다섯 색역 × 두 패턴, Advanced Color/legacy SDR와 SDR/HDR 혼합 모니터 구성을 회귀 검증한다.
+- README와 이 문서에 Grayscale 사용법, encoded code level의 의미와 Native linear-light 한계를 반영한다.
 
 ## 4. 1차 구현 상세 계획
 
@@ -431,3 +491,61 @@
 - Advanced Color에서는 보고된 원색/백색점과 bit depth가 표시되고, 유효하지 않은 정보에는 BT.2020 또는 sRGB 추정 상태가 표시되는지 확인한다.
 - legacy SDR에서는 full-range device RGB와 ICC bypass 상태가 표시되는지 확인한다.
 - 가능하면 계측 장비로 각 primary와 white의 색도·전체화면 휘도를 측정하고, 모니터 내부 처리에 따른 차이를 기록한다.
+
+## 13. 6차 구현 검증 항목
+
+### 13.1 자동 검증
+
+- x64 Debug와 x64 Release 구성을 모두 빌드한다.
+- Color 8개와 Grayscale 11개 sequence의 크기, 순서, 표시 이름과 endpoint를 검사한다.
+- sRGB GDI 10% 단계가 `0`, `26`, `51`, `77`, `102`, `128`, `153`, `179`, `204`, `230`, `255`로 변환되는지 검사한다.
+- 공통 patch index가 선택 sequence의 양 끝에서 정상적으로 순환하는지 검사한다.
+- 기존 Color patch의 출력값과 입력 동작이 변경되지 않았는지 회귀 검사한다.
+- 표준 헤더, Win32 callback 표기와 정수 타입 사용이 프로젝트 지침을 따르는지 검사한다.
+
+### 13.2 수동 검증
+
+- 메인 창에서 `Color`와 `Grayscale`을 마우스 및 키보드로 선택할 수 있는지 확인한다.
+- Color 선택 시 기존 다섯 색역 버튼이 모두 활성화되는지 확인한다.
+- Grayscale 선택 시 sRGB만 활성화되고 나머지 색역 버튼은 비활성화되는지 확인한다.
+- sRGB Grayscale이 Gray 0%부터 Gray 100%까지 표시되고 양 끝에서 정상 순환하는지 확인한다.
+- 오버레이에 `sRGB - Gray N%`가 올바르게 표시되는지 확인한다.
+- 키보드, 마우스, DPI, 커서 자동 숨김, 다중 모니터 동기화와 `Esc` 종료가 기존 Color 패턴과 동일하게 동작하는지 확인한다.
+
+## 14. 7차 구현 검증 항목
+
+### 14.1 자동 검증
+
+- x64 Debug와 x64 Release 구성을 모두 빌드한다.
+- sRGB, power gamma와 BT.2020 inverse transfer function의 endpoint, 대표 중간값과 단조 증가를 수치 검증한다.
+- Display-P3, Adobe RGB와 BT.2020의 equal-channel gray가 D65 neutral scRGB로 변환되는지 허용 오차 내에서 검사한다.
+- legacy SDR WCS source가 gamma `1.0`인 linear RGB이며 입력값이 사전에 선형화되는지 확인한다.
+- `0`과 `1` endpoint 및 기존 Color patch의 Advanced Color와 legacy SDR 출력값이 변경되지 않았는지 회귀 검사한다.
+
+### 14.2 수동 검증
+
+- Grayscale 선택 시 sRGB, Display-P3, Adobe RGB와 BT.2020 버튼이 활성화되는지 확인한다.
+- 네 표준 색역 각각에서 11개 Grayscale 단계, 입력, 오버레이와 종료 동작을 확인한다.
+- Advanced Color 활성/비활성 화면과 SDR/HDR 혼합 구성에서 모니터별 출력 경로를 확인한다.
+- Gray 단계가 육안으로 단조 증가하고 의도하지 않은 색조가 나타나지 않는지 확인한다.
+- 기존 Color 패턴의 네 표준 색역 출력이 이전 버전과 동일한지 회귀 확인한다.
+- 가능하면 계측 장비로 grayscale luminance가 단조 증가하는지, 예상 전달 함수와 일치하는지 비교한다.
+
+## 15. 8차 구현 검증 항목
+
+### 15.1 자동 검증
+
+- x64 Debug와 x64 Release 구성을 모두 빌드한다.
+- Native legacy SDR의 11개 단계가 equal-channel full-range device RGB code로 계산되는지 검사한다.
+- Native Advanced Color가 reported primaries, white point와 full-frame white scale을 사용하는 linear-light ramp인지 검사한다.
+- 원색 및 휘도 정보가 유효하지 않은 경우 기존 fallback이 적용되는지 확인한다.
+- 다섯 색역 × 두 패턴의 renderer factory 경로가 모두 생성되는지 확인한다.
+
+### 15.2 수동 검증
+
+- Grayscale 선택 시 다섯 색역 버튼이 모두 활성화되는지 확인한다.
+- Display Native RGB에서 11개 Gray 단계와 native 진단 오버레이가 함께 올바르게 표시되는지 확인한다.
+- Native Advanced Color Grayscale이 best-effort linear-light ramp임을 UI와 문서에서 확인한다.
+- 다섯 색역 × 두 패턴에서 키보드, 마우스, DPI, 커서 자동 숨김, 다중 모니터 동기화와 `Esc` 종료를 회귀 확인한다.
+- Advanced Color/legacy SDR 및 SDR/HDR 혼합 구성에서 모니터별 출력 경로를 확인한다.
+- 가능하면 계측 장비로 Native grayscale luminance의 단조 증가와 전체화면 white 휘도를 비교한다.
