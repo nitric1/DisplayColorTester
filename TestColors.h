@@ -231,7 +231,7 @@ inline constexpr std::array<TestPatch, 11> kGrayscaleTestPatches{{
     {{1.0F, 1.0F, 1.0F}, L"Gray 100%"},
 }};
 
-inline constexpr std::array<unsigned, 11> kExpectedSrgbGrayCodes{{
+inline constexpr std::array<unsigned, 11> kExpectedGrayscaleByteCodes{{
     0U, 26U, 51U, 77U, 102U, 128U, 153U, 179U, 204U, 230U, 255U,
 }};
 
@@ -250,7 +250,7 @@ inline constexpr size_t kTestOverlayTextCapacity = 384;
     return {};
 }
 
-[[nodiscard]] constexpr unsigned SrgbByteValue(float value) noexcept
+[[nodiscard]] constexpr unsigned Unorm8ByteValue(float value) noexcept
 {
     if (value <= 0.0F)
     {
@@ -261,6 +261,11 @@ inline constexpr size_t kTestOverlayTextCapacity = 384;
         return 255U;
     }
     return static_cast<unsigned>(value * 255.0F + 0.5F);
+}
+
+[[nodiscard]] constexpr float Unorm8Value(float value) noexcept
+{
+    return static_cast<float>(Unorm8ByteValue(value)) / 255.0F;
 }
 
 [[nodiscard]] constexpr bool UseDarkOverlayText(const TestPatch& patch) noexcept
@@ -290,14 +295,14 @@ size_t FormatTestOverlayText(ColorGamut gamut,
     return length;
 }
 
-[[nodiscard]] constexpr bool ValidateSrgbGrayCodes() noexcept
+[[nodiscard]] constexpr bool ValidateGrayscaleByteCodes() noexcept
 {
     for (size_t index = 0; index < kGrayscaleTestPatches.size(); ++index)
     {
         const RgbColor& rgb = kGrayscaleTestPatches[index].encodedRgb;
-        if (SrgbByteValue(rgb.red) != kExpectedSrgbGrayCodes[index] ||
-            SrgbByteValue(rgb.green) != kExpectedSrgbGrayCodes[index] ||
-            SrgbByteValue(rgb.blue) != kExpectedSrgbGrayCodes[index])
+        if (Unorm8ByteValue(rgb.red) != kExpectedGrayscaleByteCodes[index] ||
+            Unorm8ByteValue(rgb.green) != kExpectedGrayscaleByteCodes[index] ||
+            Unorm8ByteValue(rgb.blue) != kExpectedGrayscaleByteCodes[index])
         {
             return false;
         }
@@ -307,5 +312,5 @@ size_t FormatTestOverlayText(ColorGamut gamut,
 
 static_assert(kColorTestPatches.size() == 8);
 static_assert(kGrayscaleTestPatches.size() == 11);
-static_assert(ValidateSrgbGrayCodes());
+static_assert(ValidateGrayscaleByteCodes());
 }

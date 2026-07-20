@@ -227,7 +227,6 @@ bool Application::CreateButtons()
         }
     }
 
-    UpdateGamutButtonStates();
     RecreateMainFont();
     LayoutButtons();
     return true;
@@ -286,19 +285,6 @@ void Application::LayoutButtons() const noexcept
                      lastOddButton ? availableWidth + gap : buttonWidth,
                      buttonHeight,
                      SWP_NOACTIVATE | SWP_NOZORDER);
-    }
-}
-
-void Application::UpdateGamutButtonStates() const noexcept
-{
-    const bool colorPattern = selectedPattern_ == TestPattern::Color;
-    for (size_t index = 0; index < gamutButtons_.size(); ++index)
-    {
-        if (gamutButtons_[index] != nullptr)
-        {
-            const bool displayNative = index + 1 == gamutButtons_.size();
-            EnableWindow(gamutButtons_[index], (colorPattern || !displayNative) ? TRUE : FALSE);
-        }
     }
 }
 
@@ -421,13 +407,11 @@ LRESULT Application::HandleMainWindowMessage(HWND window, unsigned message, WPAR
         if (LOWORD(wParam) == IDC_PATTERN_COLOR && HIWORD(wParam) == BN_CLICKED)
         {
             selectedPattern_ = TestPattern::Color;
-            UpdateGamutButtonStates();
             return 0;
         }
         if (LOWORD(wParam) == IDC_PATTERN_GRAYSCALE && HIWORD(wParam) == BN_CLICKED)
         {
             selectedPattern_ = TestPattern::Grayscale;
-            UpdateGamutButtonStates();
             return 0;
         }
         if (LOWORD(wParam) == IDC_GAMUT_SRGB && HIWORD(wParam) == BN_CLICKED)

@@ -32,9 +32,9 @@ HFONT CreateOverlayFont(unsigned dpi) noexcept
 COLORREF SrgbColor(const TestPatch& patch) noexcept
 {
     const RgbColor& rgb = patch.encodedRgb;
-    return RGB(SrgbByteValue(rgb.red),
-               SrgbByteValue(rgb.green),
-               SrgbByteValue(rgb.blue));
+    return RGB(Unorm8ByteValue(rgb.red),
+               Unorm8ByteValue(rgb.green),
+               Unorm8ByteValue(rgb.blue));
 }
 }
 

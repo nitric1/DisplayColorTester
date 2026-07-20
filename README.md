@@ -5,7 +5,7 @@ DisplayColorTester is a native Win32 C++ utility that shows the same selected-ga
 ## Features
 
 - Five test modes: sRGB, Display-P3 (P3-D65), Adobe RGB, BT.2020, and Display Native RGB (Best effort)
-- Color and Grayscale test patterns; Grayscale is available for the four standard color modes
+- Color and Grayscale test patterns available for all five modes
 - One borderless, topmost, windowed-fullscreen window per active monitor
 - Per-monitor rendering paths for mixed legacy SDR, Advanced Color SDR, and HDR configurations
 - Keyboard and mouse test-patch navigation
@@ -19,19 +19,19 @@ DisplayColorTester is a native Win32 C++ utility that shows the same selected-ga
 | Display-P3 (P3-D65) | Uses FP16 scRGB on Advanced Color displays. On legacy SDR displays, the source gamut is converted to the monitor profile through ICC/WCS. |
 | Adobe RGB | Uses the Adobe RGB (1998) primaries and D65 white point with the same Advanced Color and legacy SDR paths as Display-P3. |
 | BT.2020 | Uses the BT.2020 primaries and D65 white point with the same Advanced Color and legacy SDR paths as Display-P3. |
-| Display Native RGB (Best effort) | On Advanced Color displays, converts the primaries and white point reported by DXGI to FP16 scRGB. On legacy SDR displays, outputs full-range device RGB endpoints without ICC/WCS conversion. |
+| Display Native RGB (Best effort) | On Advanced Color displays, converts the primaries and white point reported by DXGI to FP16 scRGB. On legacy SDR displays, outputs full-range device RGB without ICC/WCS conversion. |
 
 The eight test colors are shown in this order:
 
 Red, Green, Blue, Yellow, Magenta, Cyan, White, Black
 
-The Grayscale pattern shows Gray 0% through Gray 100% in 10% encoded code-value steps.
+The Grayscale pattern shows Gray 0% through Gray 100% in 10% steps. Standard modes interpret these as encoded code values. Display Native RGB uses device RGB code values on legacy SDR and a best-effort linear-light ramp on Advanced Color.
 
 ## Usage
 
 1. Launch `DisplayColorTester.exe`.
 2. Select a color mode.
-3. Select the Color or Grayscale test pattern. Display Native RGB remains unavailable for Grayscale.
+3. Select the Color or Grayscale test pattern.
 4. The main window is hidden and a test window opens on every active monitor.
 5. Use the following controls during the test:
 
@@ -52,7 +52,7 @@ Each monitor's Display Native RGB overlay identifies the selected output path:
 - HDR luminance metadata: reported full-frame white target, or an SDR-white estimate when unavailable
 - Legacy SDR: full-range device RGB with the ICC profile bypassed
 
-Display Native RGB is a best-effort diagnostic mode. It targets the digital RGB endpoints and reported native gamut boundary, but it cannot directly control physical subpixels or guarantee measured maximum panel luminance. GPU/Windows transforms, display calibration data, monitor processing, tone mapping, local dimming, and the physical panel structure can all affect the result. A colorimeter or spectroradiometer is required for measurement-grade verification.
+Display Native RGB is a best-effort diagnostic mode. It targets digital RGB values and the reported native gamut boundary, but it cannot directly control physical subpixels or guarantee measured maximum panel luminance. Because DXGI does not report a native transfer curve, Advanced Color Grayscale is a linear-light ramp rather than a direct device code-value test. GPU/Windows transforms, display calibration data, monitor processing, tone mapping, local dimming, and the physical panel structure can all affect the result. A colorimeter or spectroradiometer is required for measurement-grade verification.
 
 ## Build
 

@@ -511,15 +511,19 @@ bool ColorManagedRenderer::CreateWindowContext(HWND window, WindowContext& conte
             referenceWhiteScale = advancedColor.sdrWhiteScale;
 
             const wchar_t* modeName = advancedColor.hdr ? L"HDR" : L"SDR";
+            const wchar_t* grayscalePath = pattern_ == TestPattern::Grayscale
+                ? L" | linear-light Gray"
+                : L"";
             int length{};
             if (nativeDisplay.primariesValid)
             {
                 length = swprintf_s(
                     context.diagnosticText.data(),
                     context.diagnosticText.size(),
-                    L"Advanced Color %ls | DXGI primaries (EDID/override) | %u bpc\n"
+                    L"Advanced Color %ls%ls | DXGI primaries (EDID/override) | %u bpc\n"
                     L"R(%.4f, %.4f)  G(%.4f, %.4f)  B(%.4f, %.4f)  W(%.4f, %.4f)",
                     modeName,
+                    grayscalePath,
                     nativeDisplay.bitsPerColor,
                     nativeDisplay.colorSpace.redPrimary.x,
                     nativeDisplay.colorSpace.redPrimary.y,
@@ -535,9 +539,10 @@ bool ColorManagedRenderer::CreateWindowContext(HWND window, WindowContext& conte
                 length = swprintf_s(
                     context.diagnosticText.data(),
                     context.diagnosticText.size(),
-                    L"Advanced Color %ls | reported primaries unavailable\n"
+                    L"Advanced Color %ls%ls | reported primaries unavailable\n"
                     L"%ls estimate | best effort",
                     modeName,
+                    grayscalePath,
                     advancedColor.hdr ? L"BT.2020" : L"sRGB");
             }
             if (length >= 0 && advancedColor.hdr)
@@ -564,8 +569,9 @@ bool ColorManagedRenderer::CreateWindowContext(HWND window, WindowContext& conte
         else
         {
             context.colors = BuildFallbackSdrValues();
-            constexpr wchar_t diagnostic[] =
-                L"Legacy SDR | full-range device RGB | ICC bypassed | best effort";
+            const wchar_t* diagnostic = pattern_ == TestPattern::Grayscale
+                ? L"Legacy SDR | Gray code values | ICC bypassed | best effort"
+                : L"Legacy SDR | full-range device RGB | ICC bypassed | best effort";
             swprintf_s(context.diagnosticText.data(),
                        context.diagnosticText.size(),
                        L"%ls",
@@ -918,7 +924,11 @@ ColorManagedRenderer::BuildAdvancedColorValues(const RgbColorSpaceDefinition& co
                                              BuildLinearRgbToXyz(colorSpace));
     for (size_t index = 0; index < colors.size(); ++index)
     {
-        const RgbColor linear = DecodeColor(patches[index].encodedRgb, colorSpace);
+        const RgbColor encoded = patches[index].encodedRgb;
+        // DXGI exposes native primaries and white point, but not a native transfer curve.
+        const RgbColor linear = gamut_ == ColorGamut::DisplayNative
+            ? encoded
+            : DecodeColor(encoded, colorSpace);
         const RgbColor scRgb = Transform(sourceToScRgb, linear);
         colors[index] = {
             scRgb.red * referenceWhiteScale,
@@ -934,9 +944,18 @@ std::vector<ColorManagedRenderer::RenderColor> ColorManagedRenderer::BuildFallba
 {
     const TestPatchSequence patches = TestPatches(pattern_);
     std::vector<RenderColor> colors(patches.size);
+    const bool nativeDeviceValues = gamut_ == ColorGamut::DisplayNative;
     for (size_t index = 0; index < colors.size(); ++index)
     {
-        const RgbColor rgb = patches[index].encodedRgb;
+        RgbColor rgb = patches[index].encodedRgb;
+        if (nativeDeviceValues)
+        {
+            rgb = {
+                Unorm8Value(rgb.red),
+                Unorm8Value(rgb.green),
+                Unorm8Value(rgb.blue),
+            };
+        }
         colors[index] = {rgb.red, rgb.green, rgb.blue, 1.0F};
     }
     return colors;

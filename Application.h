@@ -24,7 +24,6 @@ private:
     bool CreateMainWindow(int showCommand);
     bool CreateButtons();
     void LayoutButtons() const noexcept;
-    void UpdateGamutButtonStates() const noexcept;
     void RecreateMainFont();
     void StartTest(ColorGamut gamut, size_t buttonIndex);
     void FinishTestSession(bool displayConfigurationChanged);
